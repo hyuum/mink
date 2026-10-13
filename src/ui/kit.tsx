@@ -102,7 +102,7 @@ export function Sheet({ open, onClose, label, children }: { open: boolean; onClo
     const prev = document.activeElement as HTMLElement | null;
     // Focus the sheet itself so phones don't pop the keyboard over the content.
     ref.current?.focus({ preventScroll: true });
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {

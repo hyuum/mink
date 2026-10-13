@@ -1,21 +1,33 @@
 // Starting data: sensible defaults for a fresh install, plus an optional example week.
-import type { AppData, Expense, Milestone, MilestoneKind, PlannedBlock, SpendKind, Task, TimeCategory, TimeEntry } from './types';
-import { addDays, msAt, todayISO } from '../lib/dates';
+import type { AppData, DayTemplate, Expense, Milestone, MilestoneKind, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry } from './types';
+import { addDays, fromISO, msAt, todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 
-/** Activities you paint the day with. Drift is for doomscrolling and dillydallying. */
+/**
+ * Activities you fill the day with, in the matcha and sakura palette: greens for study, work, chores and rest,
+ * pinks for people, me time and exercise, cream for meals. Drift is for doomscrolling and dillydallying.
+ */
 export const DEFAULT_TIME_CATEGORIES: TimeCategory[] = [
-  { id: 'uni', name: 'Uni', color: '#9CC488' },
+  { id: 'uni', name: 'Uni', color: '#8DBA78' },
   { id: 'work', name: 'Work', color: '#6E9A5E' },
   { id: 'friends', name: 'Friends', color: '#EE9BB2' },
-  { id: 'transport', name: 'Transport', color: '#93B9D6' },
-  { id: 'meals', name: 'Meals', color: '#F2C38B' },
-  { id: 'health', name: 'Exercise', color: '#F2A68E' },
-  { id: 'chores', name: 'Chores', color: '#D4C49A' },
-  { id: 'rest', name: 'Rest', color: '#C9B3E6' },
-  { id: 'personal', name: 'Me time', color: '#D9A3C6' },
-  { id: 'drift', name: 'Drift', color: '#B8B2C2' },
+  { id: 'transport', name: 'Transport', color: '#A9B8A3', arrow: true },
+  { id: 'meals', name: 'Meals', color: '#F4DDB0' },
+  { id: 'health', name: 'Exercise', color: '#E58AA6' },
+  { id: 'chores', name: 'Chores', color: '#BFD6A9' },
+  { id: 'rest', name: 'Rest', color: '#DCE8CF' },
+  { id: 'personal', name: 'Me time', color: '#F6C3D1' },
+  { id: 'drift', name: 'Drift', color: '#CFC8CB' },
 ];
+
+/** The colours earlier versions used, so saves that never changed them move to the new palette. */
+export const OLD_DEFAULT_COLORS: Record<string, string> = {
+  uni: '#9CC488', work: '#6E9A5E', friends: '#EE9BB2', transport: '#93B9D6', meals: '#F2C38B',
+  health: '#F2A68E', chores: '#D4C49A', rest: '#C9B3E6', personal: '#D9A3C6', drift: '#B8B2C2',
+};
+
+/** Colours handed to activities you add yourself. */
+export const EXTRA_COLORS = ['#8DBA78', '#EE9BB2', '#BFD6A9', '#F6C3D1', '#6E9A5E', '#F4DDB0'];
 
 export const DRIFT_ID = 'drift';
 
@@ -35,6 +47,8 @@ export function defaultData(): AppData {
     timeCategories: DEFAULT_TIME_CATEGORIES.map((c) => ({ ...c })),
     entries: [],
     planned: [],
+    templates: [],
+    planDays: [],
     milestones: [],
     expenses: [],
     bills: [],
@@ -85,6 +99,21 @@ export function sampleData(now: number = Date.now()): AppData {
   const pattern = [shiftDay, studyDay, shiftDay, studyDay, weekend, weekend, studyDay];
   for (let d = -13; d <= 0; d++) pattern[(d + 14) % 7](d);
 
+  // Templates that match the example's rhythm, each on the weekdays it fell on.
+  const tb = (from: number, to: number, categoryId: string, label = ''): TemplateBlock => ({ label, categoryId, startMin: from, endMin: to });
+  const shiftPlan = [tb(h(8), h(8, 45), 'transport'), tb(h(9), h(11), 'uni', 'COMP2521 lecture'), tb(h(11, 30), h(12, 15), 'meals'), tb(h(12, 15), h(12, 45), 'transport'),
+    tb(h(13), h(17), 'work', 'Shift at Mugi Café'), tb(h(17), h(17, 30), 'transport'), tb(h(18, 30), h(19, 15), 'meals'), tb(h(20), h(21), 'rest')];
+  const studyPlan = [tb(h(9, 30), h(12), 'uni', 'Readings'), tb(h(12), h(12, 45), 'meals'), tb(h(13), h(16), 'uni', 'Lab prep'), tb(h(16), h(16, 30), 'chores'),
+    tb(h(17), h(18), 'health', 'Gym'), tb(h(18, 15), h(19), 'meals'), tb(h(19), h(20), 'personal')];
+  const slowPlan = [tb(h(10, 30), h(11), 'chores'), tb(h(11, 30), h(14), 'friends'), tb(h(15), h(16), 'chores', 'Laundry'), tb(h(16), h(17), 'personal', 'Sketching'), tb(h(18), h(19), 'meals')];
+  const weekdayOf = (d: number) => (fromISO(addDays(today, d)).getDay() + 6) % 7;
+  const daysFor = (fn: (d: number) => void) => Array.from({ length: 7 }, (_, i) => i - 6).filter((d) => pattern[(d + 14) % 7] === fn).map(weekdayOf);
+  const templates: DayTemplate[] = [
+    { id: uid(), name: 'Shift day', weekdays: daysFor(shiftDay), blocks: shiftPlan },
+    { id: uid(), name: 'Study day', weekdays: daysFor(studyDay), blocks: studyPlan },
+    { id: uid(), name: 'Slow day', weekdays: daysFor(weekend), blocks: slowPlan },
+  ];
+
   // Milestones: wake and bed every day, plus leave / arrive / home on shift days.
   const milestones: Milestone[] = [];
   const mark = (dayOffset: number, kind: MilestoneKind, min: number) => {
@@ -100,10 +129,6 @@ export function sampleData(now: number = Date.now()): AppData {
     if (pattern[i] === shiftDay) { mark(d, 'leave', h(8, 15)); mark(d, 'arrive', h(9)); mark(d, 'home', h(17, 30)); }
     mark(d, 'bed', beds[i]);
   }
-
-  const planned: PlannedBlock[] = [
-    { id: uid(), label: 'Gym', categoryId: 'health', day: today, startMin: h(19), endMin: h(20) },
-  ];
 
   const spend: [number, number, SpendKind, string[], string][] = [
     [0, 520, 'want', ['coffee'], 'Coffee · Mugi Café'],
@@ -138,7 +163,7 @@ export function sampleData(now: number = Date.now()): AppData {
     ...data,
     example: true,
     entries,
-    planned,
+    templates,
     milestones,
     expenses,
     bills: [

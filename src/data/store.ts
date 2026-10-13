@@ -2,10 +2,11 @@
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
 import type { AppData, Bill, Expense, ID, Milestone, PlannedBlock, Settings, SpendKind, Task, TimeEntry } from './types';
-import { DEFAULT_TIME_CATEGORIES, defaultData, sampleData } from './seed';
+import { DEFAULT_TIME_CATEGORIES, EXTRA_COLORS, OLD_DEFAULT_COLORS, defaultData, sampleData } from './seed';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
-import { nextDue, paintRange } from './logic';
+import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
 import { uid } from '../lib/id';
+import { addDays, dayStartMs, msAt } from '../lib/dates';
 import type { Day } from './types';
 
 let state: AppData = defaultData();
@@ -66,17 +67,28 @@ export function migrate(raw: unknown): AppData {
   });
 
   // Add the new default activities (Friends, Transport, Drift…) that older saves don't have.
-  const timeCategories = arr(d.timeCategories, base.timeCategories);
+  const timeCategories = arr(d.timeCategories, base.timeCategories).map((c) => {
+    // Move untouched default colours to the matcha and sakura palette, and draw travel as an arrow.
+    const def = DEFAULT_TIME_CATEGORIES.find((x) => x.id === c.id);
+    if (!def) return c;
+    const recolour = OLD_DEFAULT_COLORS[c.id]?.toUpperCase() === c.color?.toUpperCase();
+    return { ...c, color: recolour ? def.color : c.color, arrow: c.arrow ?? def.arrow };
+  });
   if ((d.version ?? 1) < 2) {
     for (const c of DEFAULT_TIME_CATEGORIES) if (!timeCategories.some((x) => x.id === c.id)) timeCategories.push({ ...c });
   }
+  // Older saves kept plans only as loose blocks: every day that has some keeps them as its own plan.
+  const planned = arr(d.planned, []);
+  const planDays = Array.isArray(d.planDays) ? d.planDays : Array.from(new Set(planned.map((p) => p.day)));
 
   return {
     version: 2,
     example: Boolean(d.example),
     timeCategories,
     entries: arr(d.entries, []),
-    planned: arr(d.planned, []),
+    planned,
+    templates: arr(d.templates, []),
+    planDays,
     milestones: arr(d.milestones, []),
     expenses,
     bills,
@@ -121,6 +133,23 @@ export const getData = () => state;
 
 const replace = <T extends { id: ID }>(list: T[], id: ID, patch: Partial<T>) => list.map((x) => (x.id === id ? { ...x, ...patch } : x));
 const remove = <T extends { id: ID }>(list: T[], id: ID) => list.filter((x) => x.id !== id);
+const unlink = (e: TimeEntry): TimeEntry => { const { planId: _p, ...rest } = e; return rest; };
+const unlinkMissing = (d: AppData): AppData => {
+  const ids = new Set(d.planned.map((p) => p.id));
+  return { ...d, entries: d.entries.map((e) => (e.planId && !ids.has(e.planId) && !isTemplatePlan(e.planId) ? unlink(e) : e)) };
+};
+
+/** Gives the day a plan block belongs to its own copy of its template, and returns the block's real id. */
+function own(d: AppData, id: ID): { data: AppData; id: ID } {
+  if (!isTemplatePlan(id)) return { data: d, id };
+  const day = id.split(':')[3];
+  const { data, ids } = ownPlan(d, day, uid);
+  return { data, id: ids[id] ?? id };
+}
+const hasLogged = (d: AppData, day: string) => {
+  const from = dayStartMs(day), to = dayStartMs(addDays(day, 1));
+  return d.entries.some((e) => e.start >= from && e.start < to);
+};
 
 export const actions = {
   /** Put back an earlier snapshot (used by Undo). */
@@ -129,12 +158,12 @@ export const actions = {
   },
 
   /* Time */
-  startTimer(label: string, categoryId: ID, now = Date.now()) {
+  startTimer(label: string, categoryId: ID, now = Date.now(), planId?: ID) {
     update((d) => ({
       ...d,
       entries: [
         ...d.entries.map((e) => (e.end === null ? { ...e, end: now } : e)),
-        { id: uid(), label: label.trim(), categoryId, start: now, end: null, source: 'timer' },
+        { id: uid(), label: label.trim(), categoryId, start: now, end: null, source: 'timer', ...(planId ? { planId } : {}) },
       ],
     }));
   },
@@ -159,22 +188,123 @@ export const actions = {
     return before;
   },
   addPlanned(p: Omit<PlannedBlock, 'id'>) {
-    update((d) => ({ ...d, planned: [...d.planned, { ...p, id: uid() }] }));
+    update((d) => {
+      const { data } = ownPlan(d, p.day, uid);
+      return { ...data, planned: [...data.planned, { ...p, id: uid() }] };
+    });
   },
-  updatePlanned(id: ID, patch: Partial<PlannedBlock>) {
-    update((d) => ({ ...d, planned: replace(d.planned, id, patch) }));
+  /** Returns the block's id, which changes when it came straight from a template. */
+  updatePlanned(id: ID, patch: Partial<PlannedBlock>): ID {
+    let real = id;
+    update((d) => {
+      const owned = own(d, id);
+      real = owned.id;
+      const data = patch.day ? ownPlan(owned.data, patch.day, uid).data : owned.data;
+      return { ...data, planned: replace(data.planned, real, patch) };
+    });
+    return real;
   },
   deletePlanned(id: ID): AppData {
     const before = state;
-    update((d) => ({ ...d, planned: remove(d.planned, id) }));
+    update((d) => {
+      const { data, id: real } = own(d, id);
+      return unlinkMissing({ ...data, planned: remove(data.planned, real) });
+    });
     return before;
   },
-  /** Start the timer for a planned block; the plan becomes a real entry. */
+  /** Start the timer for a planned block. The plan counts as done once the timer is running. */
   startPlanned(id: ID, now = Date.now()) {
-    const p = state.planned.find((x) => x.id === id);
+    const { data, id: real } = own(state, id);
+    const p = data.planned.find((x) => x.id === real);
     if (!p) return;
-    actions.startTimer(p.label, p.categoryId, now);
-    update((d) => ({ ...d, planned: remove(d.planned, id) }));
+    set(data);
+    actions.startTimer(p.label, p.categoryId, now, real);
+  },
+  /** Plan [from, to) minutes of a day with an activity, or clear it (null). Returns the earlier snapshot and the new block's id. */
+  planPaint(day: string, from: number, to: number, categoryId: ID | null): { before: AppData; id: ID | null } {
+    const before = state;
+    let id: ID | null = null;
+    update((d) => {
+      const { data } = ownPlan(d, day, uid);
+      const r = planRange(data.planned, day, from, to, categoryId, uid);
+      id = r.id;
+      return unlinkMissing({ ...data, planned: r.blocks });
+    });
+    return { before, id };
+  },
+  /** Fill in a planned block: logs it exactly as planned, replacing anything logged in that time. */
+  completePlan(planId: ID, now = Date.now()): { before: AppData; entryId: ID | null } {
+    const before = state;
+    let entryId: ID | null = null;
+    update((d) => {
+      const { data, id } = own(d, planId);
+      const p = data.planned.find((x) => x.id === id);
+      if (!p) return d;
+      const from = msAt(p.day, p.startMin);
+      const to = msAt(p.day, p.endMin);
+      entryId = uid();
+      const cleared = paintRange(data.entries, from, to, null, now, uid);
+      return { ...data, entries: [...cleared, { id: entryId, label: p.label, categoryId: p.categoryId, start: from, end: to, source: 'plan', planId: id }] };
+    });
+    return { before, entryId };
+  },
+
+  /* Day templates */
+  /** Make this day's weekday follow a template (or none). The day's own plan is replaced by it. */
+  setDayTemplate(day: string, templateId: ID | null): AppData {
+    const before = state;
+    update((d) => {
+      const w = weekdayIndex(day);
+      const templates = d.templates.map((t) => ({ ...t, weekdays: t.id === templateId ? [...t.weekdays.filter((x) => x !== w), w].sort() : t.weekdays.filter((x) => x !== w) }));
+      let next: AppData = unlinkMissing({ ...d, templates, planned: d.planned.filter((p) => p.day !== day), planDays: d.planDays.filter((x) => x !== day) });
+      // Keep what's already logged that day counting toward the new plan.
+      if (hasLogged(next, day)) {
+        next = ownPlan(next, day, uid).data;
+        next = { ...next, entries: relinkDay(next.entries, planForDay(next, day), day) };
+      }
+      return next;
+    });
+    return before;
+  },
+  /** Turn a weekday on or off for a template. A weekday follows only one template. */
+  toggleTemplateWeekday(templateId: ID, weekday: number) {
+    update((d) => {
+      const on = d.templates.find((t) => t.id === templateId)?.weekdays.includes(weekday);
+      return {
+        ...d,
+        templates: d.templates.map((t) => ({
+          ...t,
+          weekdays: t.id === templateId ? (on ? t.weekdays.filter((x) => x !== weekday) : [...t.weekdays, weekday].sort()) : on ? t.weekdays : t.weekdays.filter((x) => x !== weekday),
+        })),
+      };
+    });
+  },
+  /** Copy this day's plan into the template its weekday follows. Days without their own plan pick it up. */
+  saveDayToTemplate(day: string) {
+    update((d) => {
+      const t = templateFor(d.templates, day);
+      if (!t) return d;
+      const blocks = planForDay(d, day).map(({ label, categoryId, startMin, endMin }) => ({ label, categoryId, startMin, endMin }));
+      return { ...d, templates: replace(d.templates, t.id, { blocks }) };
+    });
+  },
+  /** A new template from this day's plan, repeating on this day's weekday. */
+  addTemplateFromDay(day: string, name: string): ID {
+    const id = uid();
+    update((d) => {
+      const w = weekdayIndex(day);
+      const blocks = planForDay(d, day).map(({ label, categoryId, startMin, endMin }) => ({ label, categoryId, startMin, endMin }));
+      return { ...d, templates: [...d.templates.map((t) => ({ ...t, weekdays: t.weekdays.filter((x) => x !== w) })), { id, name, weekdays: [w], blocks }] };
+    });
+    return id;
+  },
+  renameTemplate(id: ID, name: string) {
+    update((d) => ({ ...d, templates: replace(d.templates, id, { name }) }));
+  },
+  deleteTemplate(id: ID): AppData {
+    const before = state;
+    update((d) => ({ ...d, templates: remove(d.templates, id) }));
+    return before;
   },
 
   /* Milestones */
@@ -261,12 +391,11 @@ export const actions = {
     update((d) => ({ ...d, timeCategories: replace(d.timeCategories, id, { name }) }));
   },
   addTimeCategory(name: string) {
-    const colors = ['#9CC488', '#EE9BB2', '#F2B8A0', '#C9B3E6', '#6E9A5E', '#E9C46A'];
-    update((d) => ({ ...d, timeCategories: [...d.timeCategories, { id: uid(), name, color: colors[d.timeCategories.length % colors.length] }] }));
+    update((d) => ({ ...d, timeCategories: [...d.timeCategories, { id: uid(), name, color: EXTRA_COLORS[d.timeCategories.length % EXTRA_COLORS.length] }] }));
   },
   /** Start fresh: keep categories, lists and settings, clear every record. */
   startFresh() {
-    update((d) => ({ ...d, example: false, entries: [], planned: [], milestones: [], expenses: [], bills: [], tasks: [] }));
+    update((d) => ({ ...d, example: false, entries: [], planned: [], planDays: [], milestones: [], expenses: [], bills: [], tasks: [] }));
   },
   loadExample() {
     const s = sampleData();

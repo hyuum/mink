@@ -171,3 +171,64 @@ test('milestones: names, ordering, bedtimes past midnight', () => {
   assert.ok(s.milestones.some((m) => m.kind === 'wake' && m.day === '2026-10-12'));
   assert.ok(!s.milestones.some((m) => m.kind === 'bed' && m.day === '2026-10-12')); // not bedtime yet
 });
+
+test('a day shows its weekday template until it gets its own plan', async () => {
+  const { planForDay, ownPlan, planRange, isTemplatePlan, weekdayIndex } = await import('../src/data/logic.ts');
+  const d = defaultData();
+  d.templates = [{ id: 't1', name: 'Uni day', weekdays: [0], blocks: [{ label: '', categoryId: 'uni', startMin: 540, endMin: 660 }, { label: '', categoryId: 'transport', startMin: 480, endMin: 525 }] }];
+  assert.equal(weekdayIndex('2026-10-12'), 0); // Monday
+  const monday = planForDay(d, '2026-10-12');
+  assert.deepEqual(monday.map((p) => p.startMin), [480, 540]);
+  assert.ok(isTemplatePlan(monday[0].id));
+  assert.equal(planForDay(d, '2026-10-13').length, 0);
+
+  let n = 0;
+  const { data, ids } = ownPlan(d, '2026-10-12', () => `p${++n}`);
+  assert.deepEqual(data.planDays, ['2026-10-12']);
+  assert.equal(ids[monday[0].id], 'p1');
+  assert.ok(planForDay(data, '2026-10-12').every((p) => !isTemplatePlan(p.id)));
+  // Changing the template no longer changes a day with its own plan.
+  data.templates[0].blocks = [];
+  assert.equal(planForDay(data, '2026-10-12').length, 2);
+
+  // Planning over the middle of a block splits it.
+  const r = planRange(data.planned, '2026-10-12', 570, 600, 'meals', () => `p${++n}`);
+  assert.deepEqual(r.blocks.filter((p) => p.categoryId === 'uni').map((p) => [p.startMin, p.endMin]), [[540, 570], [600, 660]]);
+  assert.equal(r.blocks.find((p) => p.id === r.id)?.categoryId, 'meals');
+});
+
+test('filling a plan logs it and marks it done; logged time relinks to a new plan', async () => {
+  const { actions, getData } = await import('../src/data/store.ts');
+  const { donePlanIds, planForDay, relinkDay } = await import('../src/data/logic.ts');
+  const day = '2026-10-12';
+  const d = defaultData();
+  d.templates = [{ id: 't1', name: 'Uni day', weekdays: [0], blocks: [{ label: 'Lecture', categoryId: 'uni', startMin: 540, endMin: 660 }] }];
+  d.entries = [{ id: 'x', label: '', categoryId: 'drift', start: msAt(day, 600), end: msAt(day, 630) }];
+  actions.restore(d);
+  const planId = planForDay(getData(), day)[0].id;
+  const { entryId } = actions.completePlan(planId, msAt(day, 23 * 60));
+  const after = getData();
+  const made = after.entries.find((e) => e.id === entryId)!;
+  assert.equal(made.label, 'Lecture');
+  assert.equal(made.start, msAt(day, 540));
+  assert.ok(!after.entries.some((e) => e.id === 'x'), 'logged time under the plan is replaced');
+  assert.ok(after.planDays.includes(day));
+  assert.ok(donePlanIds(after.entries).has(made.planId!));
+
+  const plan = [{ id: 'q', label: '', categoryId: 'uni', day, startMin: 560, endMin: 640 }];
+  assert.equal(relinkDay(after.entries, plan, day).find((e) => e.id === entryId)?.planId, 'q');
+});
+
+test('migrate gives old saves plan days, the new palette and travel arrows', () => {
+  const m = migrate({
+    version: 2, entries: [], tasks: [],
+    planned: [{ id: 'p', label: '', categoryId: 'uni', day: '2026-10-12', startMin: 60, endMin: 120 }],
+    timeCategories: [{ id: 'uni', name: 'Uni', color: '#9CC488' }, { id: 'transport', name: 'Bus', color: '#123456' }],
+  });
+  assert.deepEqual(m.planDays, ['2026-10-12']);
+  assert.deepEqual(m.templates, []);
+  assert.equal(m.timeCategories.find((c) => c.id === 'uni')?.color, '#8DBA78');
+  const t = m.timeCategories.find((c) => c.id === 'transport')!;
+  assert.equal(t.color, '#123456', 'a colour you picked yourself stays');
+  assert.equal(t.arrow, true);
+});

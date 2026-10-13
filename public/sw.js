@@ -1,5 +1,5 @@
 // Offline support: cache the app shell, serve it cache-first, refresh in the background.
-const CACHE = 'matcha-planner-v1';
+const CACHE = 'matcha-planner-v2';
 const SHELL = ['./', 'index.html', 'app.js', 'app.css', 'manifest.webmanifest', 'icon.svg'];
 
 self.addEventListener('install', (e) => {

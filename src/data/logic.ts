@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, Expense, ID, Milestone, Priority, SpendKind, Task, TimeEntry } from './types';
+import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PlannedBlock, Priority, SpendKind, Task, TimeEntry } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 import { DRIFT_ID, MILESTONE_KINDS } from './seed';
 
@@ -114,6 +114,70 @@ export function unloggedMin(entries: TimeEntry[], day: Day, fromHour: number, to
     cursor = b;
   }
   return Math.round((to - from - covered) / MIN_MS);
+}
+
+/* ---------- Plans and templates ---------- */
+
+/** 0 = Monday … 6 = Sunday. */
+export const weekdayIndex = (day: Day) => (fromISO(day).getDay() + 6) % 7;
+
+export const templateFor = (templates: DayTemplate[], day: Day) => templates.find((t) => t.weekdays.includes(weekdayIndex(day)));
+
+const TPL_PREFIX = 'tpl:';
+/** Plans shown straight from a template have made-up ids until the day gets its own copy. */
+export const isTemplatePlan = (id: ID) => id.startsWith(TPL_PREFIX);
+const templatePlanId = (t: DayTemplate, i: number, day: Day) => `${TPL_PREFIX}${t.id}:${i}:${day}`;
+
+/** A day's plan: its own blocks once it has some (or was edited), otherwise its weekday's template. */
+export function planForDay(d: Pick<AppData, 'planned' | 'planDays' | 'templates'>, day: Day): PlannedBlock[] {
+  if (d.planDays.includes(day)) return d.planned.filter((p) => p.day === day).sort((a, b) => a.startMin - b.startMin);
+  const t = templateFor(d.templates, day);
+  if (!t) return [];
+  return t.blocks.map((b, i) => ({ ...b, id: templatePlanId(t, i, day), day })).sort((a, b) => a.startMin - b.startMin);
+}
+
+/** Copies a day's template into `planned` so it can be changed. Returns the new data and old id → new id. */
+export function ownPlan(d: AppData, day: Day, makeId: () => ID): { data: AppData; ids: Record<ID, ID> } {
+  if (d.planDays.includes(day)) return { data: d, ids: {} };
+  const ids: Record<ID, ID> = {};
+  const copies = planForDay(d, day).map((p) => { const id = makeId(); ids[p.id] = id; return { ...p, id }; });
+  return { data: { ...d, planned: [...d.planned, ...copies], planDays: [...d.planDays, day] }, ids };
+}
+
+/** Clears [from, to) minutes in one day's plan, trimming or splitting blocks, then adds a block if given an activity. */
+export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: number, categoryId: ID | null, makeId: () => ID): { blocks: PlannedBlock[]; id: ID | null } {
+  if (to <= from) return { blocks, id: null };
+  const out: PlannedBlock[] = [];
+  for (const p of blocks) {
+    if (p.day !== day || p.endMin <= from || p.startMin >= to) { out.push(p); continue; }
+    if (p.startMin < from) out.push({ ...p, endMin: from });
+    if (p.endMin > to) out.push({ ...p, id: p.startMin < from ? makeId() : p.id, startMin: to });
+  }
+  const id = categoryId ? makeId() : null;
+  if (categoryId && id) out.push({ id, label: '', categoryId, day, startMin: from, endMin: to });
+  return { blocks: out, id };
+}
+
+/** Ids of plans that have been filled in. */
+export const donePlanIds = (entries: TimeEntry[]) => new Set(entries.map((e) => e.planId).filter((x): x is ID => Boolean(x)));
+
+/**
+ * Links a day's logged blocks to its plan after the plan changes: a logged block counts for a plan of the
+ * same activity that it covers at least half of.
+ */
+export function relinkDay(entries: TimeEntry[], plan: PlannedBlock[], day: Day): TimeEntry[] {
+  const from = dayStartMs(day);
+  const to = dayStartMs(addDays(day, 1));
+  const used = new Set<ID>();
+  return entries.map((e) => {
+    if (e.start < from || e.start >= to || e.end === null) return e;
+    const s = (e.start - from) / MIN_MS;
+    const t = (e.end - from) / MIN_MS;
+    const p = plan.find((x) => x.categoryId === e.categoryId && !used.has(x.id) && Math.min(x.endMin, t) - Math.max(x.startMin, s) >= (x.endMin - x.startMin) / 2);
+    if (p) used.add(p.id);
+    const { planId: _old, ...rest } = e;
+    return p ? { ...rest, planId: p.id } : rest;
+  });
 }
 
 /* ---------- Milestones ---------- */

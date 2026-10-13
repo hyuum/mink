@@ -8,13 +8,15 @@ export interface TimeCategory {
   id: ID;
   name: string;
   color: string;
+  /** Drawn as a thin arrow in its own lane instead of a block, like travel in a paper planner. */
+  arrow?: boolean;
 }
 
 /** Every expense is either a need or a want. */
 export type SpendKind = 'need' | 'want';
 
 /** Where a block of time came from. `device` is reserved for syncing phone activity later. */
-export type EntrySource = 'paint' | 'timer' | 'manual' | 'device';
+export type EntrySource = 'paint' | 'timer' | 'manual' | 'plan' | 'device';
 
 /** A logged block of time. `end === null` means the timer is still running. */
 export interface TimeEntry {
@@ -25,6 +27,8 @@ export interface TimeEntry {
   start: number;
   end: number | null;
   source?: EntrySource;
+  /** The planned block this was filled in from, if any. That plan then counts as done. */
+  planId?: ID;
 }
 
 /** A block planned on the timeline but not logged yet. */
@@ -36,6 +40,23 @@ export interface PlannedBlock {
   /** Minutes after midnight. */
   startMin: number;
   endMin: number;
+}
+
+/** One block of a day template, in minutes after midnight. */
+export interface TemplateBlock {
+  label: string;
+  categoryId: ID;
+  startMin: number;
+  endMin: number;
+}
+
+/** A reusable day plan ("Uni day") that repeats on chosen weekdays. */
+export interface DayTemplate {
+  id: ID;
+  name: string;
+  /** 0 = Monday … 6 = Sunday. Each weekday follows at most one template. */
+  weekdays: number[];
+  blocks: TemplateBlock[];
 }
 
 export type MilestoneKind = 'wake' | 'leave' | 'arrive' | 'lunch' | 'home' | 'bed' | 'custom';
@@ -115,6 +136,9 @@ export interface AppData {
   timeCategories: TimeCategory[];
   entries: TimeEntry[];
   planned: PlannedBlock[];
+  templates: DayTemplate[];
+  /** Days with their own plan in `planned`. Every other day shows its weekday's template. */
+  planDays: Day[];
   milestones: Milestone[];
   expenses: Expense[];
   bills: Bill[];

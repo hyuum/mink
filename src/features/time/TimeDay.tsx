@@ -1,53 +1,51 @@
-// The day timeline. Pick an activity in the dock, then drag down the day to paint what you did,
-// 15 minutes at a time. Blank time stays blank: that's unlogged. Milestones sit on top.
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { actions, useData } from '../../data/store';
-import { bedOf, dayTotals, entriesForDay, entryEnd, milestoneName, milestonesForDay, runningEntry, unloggedMin, wakeOf, weekDays } from '../../data/logic';
+// The day timeline. Drag down the day to select some time, then pick what it was. Blocks are solid:
+// drag one to move it, tap it for handles to resize. Planned blocks still ahead show dashed; hold one
+// to fill it in. "Edit plan" switches the timeline to the plan on its own, with templates.
+import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { actions, getData, useData } from '../../data/store';
+import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, milestoneName, milestonesForDay, planForDay, runningEntry, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import { DRIFT_ID } from '../../data/seed';
-import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
-import { ERASE, showToast, timeDay, useNow } from '../../app/ui-state';
-import { Band, Bar, Card } from '../../ui/kit';
+import type { ID, TimeCategory } from '../../data/types';
+import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
+import { showToast, timeDay, useNow } from '../../app/ui-state';
+import { Band, Bar, Card, Sheet } from '../../ui/kit';
 import { IconLeft, IconRight, IconStop } from '../../ui/icons';
 import { EntryEditor, type EditTarget } from './EntryEditor';
-import { PaintDock } from './PaintDock';
-import { SLOT, usePainter } from './usePainter';
 import { FlagButton, MilestoneEditor, MilestoneIcon, fmtMilestone, type MilestoneTarget } from './Milestones';
 import { Dial } from './Dial';
 import { TimeTabs } from './TimeTabs';
+import { PlanControls } from './PlanControls';
+import { drawPenLines } from './doodles';
 
 const HOUR_PX = 52;
 const TOP_PAD = 12;
 const GUTTER = 58;
+const LANE = 20; // room on the left for arrow activities
+const SLOT = 15;
+const HOLD_MS = 1100;
 
-interface Placed {
-  key: string;
+type Kind = 'entry' | 'plan';
+interface Block {
+  kind: Kind;
+  id: ID;
   startMin: number;
   endMin: number;
-  lane: number;
-  lanes: number;
-  render: () => { title: string; sub: string; color: string; planned: boolean; live: boolean; drift: boolean; target: EditTarget };
+  categoryId: ID;
+  label: string;
+  /** Can't be dragged: a running timer, or a block that crosses midnight. Tapping opens the editor. */
+  fixed: boolean;
+  live: boolean;
+  /** A planned block shown while recording: dashed, and hold to fill it. */
+  ghost: boolean;
 }
+type Gesture =
+  | { type: 'range'; a: number; b: number; y0: number; cy: number; moved: boolean }
+  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; y0: number; cy: number; moved: boolean };
+interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
 
-/** Assigns side-by-side lanes to overlapping blocks (painted blocks never overlap; plans and timers can). */
-function layout(items: Omit<Placed, 'lane' | 'lanes'>[]): Placed[] {
-  const sorted = [...items].sort((a, b) => a.startMin - b.startMin || b.endMin - a.endMin);
-  const out: Placed[] = [];
-  let cluster: Placed[] = [];
-  let laneEnds: number[] = [];
-  let clusterEnd = -1;
-  const close = () => { for (const p of cluster) p.lanes = laneEnds.length; cluster = []; laneEnds = []; };
-  for (const it of sorted) {
-    if (it.startMin >= clusterEnd) close();
-    let lane = laneEnds.findIndex((end) => end <= it.startMin);
-    if (lane === -1) { lane = laneEnds.length; laneEnds.push(it.endMin); } else laneEnds[lane] = it.endMin;
-    const p = { ...it, lane, lanes: 1 };
-    cluster.push(p);
-    out.push(p);
-    clusterEnd = Math.max(clusterEnd, it.endMin);
-  }
-  close();
-  return out;
-}
+/** Activities picked recently come first in the picker. */
+let recent: ID[] = [];
+const noteRecent = (id: ID) => { recent = [id, ...recent.filter((r) => r !== id)].slice(0, 3); };
 
 export function TimeDay() {
   const data = useData();
@@ -60,98 +58,368 @@ export function TimeDay() {
   const [mEdit, setMEdit] = useState<MilestoneTarget>(null);
   const [extra, setExtra] = useState({ before: 0, after: 0 });
   const [dial, setDial] = useState(false);
+  const [planMode, setPlanMode] = useState(false);
+  const [peek, setPeek] = useState(false);
+  const [sel, setSel] = useState<{ kind: Kind; id: ID } | null>(null);
+  const [pick, setPick] = useState<Pick | null>(null);
+  const [range, setRange] = useState<{ from: number; to: number } | null>(null);
+  const [moving, setMoving] = useState<{ id: ID; startMin: number; endMin: number } | null>(null);
+  const [holding, setHolding] = useState<ID | null>(null);
   const grid = useRef<HTMLDivElement>(null);
-  const cat = (id: string) => data.timeCategories.find((c) => c.id === id);
+  const col = useRef<HTMLDivElement>(null);
+  const fx = useRef<HTMLDivElement>(null);
+  const gesture = useRef<Gesture | null>(null);
+  const hold = useRef<{ block: Block; t0: number; x: number; y: number; raf: number; water: HTMLElement | null } | null>(null);
+  const cat = (id: ID): TimeCategory | undefined => data.timeCategories.find((c) => c.id === id);
   const s = data.settings;
 
+  useEffect(() => { setSel(null); setPick(null); setRange(null); }, [day, planMode]);
+  // Keep toasts clear of the selection bar while it's showing.
+  useEffect(() => {
+    if (!sel) return;
+    document.documentElement.style.setProperty('--dock-space', '64px');
+    return () => { document.documentElement.style.removeProperty('--dock-space'); };
+  }, [sel !== null]);
+
+  const dayStart = dayStartMs(day);
+  const nowMin = day === today ? minutesOfDay(now) : null;
   const entries = entriesForDay(data.entries, day, now);
-  const planned = data.planned.filter((p) => p.day === day);
+  const plan = planForDay(data, day);
+  const done = donePlanIds(data.entries);
+  const doneCount = plan.filter((p) => done.has(p.id)).length;
+  const ahead = (endMin: number) => day > today || (nowMin !== null && endMin > nowMin);
+  const shownPlans = planMode ? plan : plan.filter((p) => !done.has(p.id) && (peek || ahead(p.endMin)));
+
+  const toMin = (ms: number) => (ms - dayStart) / 60_000;
+  const logged: Block[] = planMode ? [] : entries.map((e) => {
+    const end = entryEnd(e, now);
+    return {
+      kind: 'entry', id: e.id, categoryId: e.categoryId, label: e.label,
+      startMin: Math.max(0, toMin(e.start)), endMin: Math.min(24 * 60, Math.max(toMin(end), toMin(e.start) + 1)),
+      fixed: e.end === null || e.start < dayStart || end > dayStart + 24 * 3_600_000, live: e.end === null, ghost: false,
+    };
+  });
+  const plans: Block[] = shownPlans.map((p) => ({ kind: 'plan', id: p.id, categoryId: p.categoryId, label: p.label, startMin: p.startMin, endMin: p.endMin, fixed: false, live: false, ghost: !planMode }));
+  const withMove = (b: Block) => (moving && moving.id === b.id ? { ...b, startMin: moving.startMin, endMin: moving.endMin } : b);
+  const loggedV = logged.map(withMove);
+  const plansV = plans.map(withMove);
+  const all = [...plansV, ...loggedV];
+
+  let h0 = s.dayStartHour - extra.before;
+  let h1 = s.dayEndHour + extra.after;
   const miles = milestonesForDay(data.milestones, day);
+  for (const b of all) { h0 = Math.min(h0, Math.floor(b.startMin / 60)); h1 = Math.max(h1, Math.ceil(b.endMin / 60)); }
+  for (const m of miles) { h0 = Math.min(h0, Math.floor(m.min / 60)); h1 = Math.max(h1, Math.min(24, Math.ceil((m.min + 1) / 60))); }
+  h0 = Math.max(0, h0); h1 = Math.min(24, Math.max(h1, h0 + 1));
+  const top = (min: number) => TOP_PAD + ((min - h0 * 60) / 60) * HOUR_PX;
+  const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
+  const hours = Array.from({ length: h1 - h0 + 1 }, (_, i) => h0 + i);
+  const isArrow = (b: Block) => Boolean(cat(b.categoryId)?.arrow);
+  const laneOn = all.some(isArrow);
+
   const wake = wakeOf(data.milestones, day);
   const bed = bedOf(data.milestones, day);
   const totals = dayTotals(data.entries, day, now);
   const unlogged = unloggedMin(data.entries, day, s.dayStartHour, s.dayEndHour, day === today ? now : Infinity);
-  const dayStart = dayStartMs(day);
-
-  const placed = useMemo(() => layout([
-    ...entries.map((e) => {
-      const st = Math.max(0, (e.start - dayStart) / 60_000);
-      const t = Math.min(24 * 60, (entryEnd(e, now) - dayStart) / 60_000);
-      const c = cat(e.categoryId);
-      return {
-        key: e.id, startMin: st, endMin: Math.max(t, st + 1),
-        render: () => ({
-          title: e.label || c?.name || 'Untitled',
-          sub: `${fmtHM(st)} – ${e.end === null ? 'now' : fmtHM(t)}${e.label && c ? ` · ${c.name}` : ''}`,
-          color: c?.color ?? '#ccc', planned: false, live: e.end === null, drift: e.categoryId === DRIFT_ID, target: { kind: 'entry', id: e.id } as EditTarget,
-        }),
-      };
-    }),
-    ...planned.map((p) => ({
-      key: p.id, startMin: p.startMin, endMin: p.endMin,
-      render: () => ({ title: p.label || cat(p.categoryId)?.name || 'Planned', sub: `${fmtHM(p.startMin)} – ${fmtHM(p.endMin)} · planned`, color: cat(p.categoryId)?.color ?? '#ccc', planned: true, live: false, drift: false, target: { kind: 'planned', id: p.id } as EditTarget }),
-    })),
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  ]), [data, day, Math.floor(now / 60_000)]);
-
-  let h0 = s.dayStartHour - extra.before;
-  let h1 = s.dayEndHour + extra.after;
-  for (const p of placed) { h0 = Math.min(h0, Math.floor(p.startMin / 60)); h1 = Math.max(h1, Math.ceil(p.endMin / 60)); }
-  for (const m of miles) { h0 = Math.min(h0, Math.floor(m.min / 60)); h1 = Math.max(h1, Math.min(24, Math.ceil((m.min + 1) / 60))); }
-  h0 = Math.max(0, h0); h1 = Math.min(24, Math.max(h1, h0 + 1));
-  const top = (min: number) => TOP_PAD + ((min - h0 * 60) / 60) * HOUR_PX;
-  const hours = Array.from({ length: h1 - h0 }, (_, i) => h0 + i);
-  const nowMin = day === today ? minutesOfDay(now) : null;
 
   // Open on "now" (or the first block) the first time the day is shown.
   useEffect(() => {
     const el = grid.current;
     if (!el) return;
-    const target = nowMin ?? placed[0]?.startMin ?? h0 * 60;
+    const target = nowMin ?? all[0]?.startMin ?? h0 * 60;
     const y = el.getBoundingClientRect().top + window.scrollY + top(target) - window.innerHeight * 0.4;
     window.scrollTo({ top: Math.max(0, y) });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day]);
 
-  const { brush, drag, handlers } = usePainter((_x, y) => {
-    const el = grid.current;
-    if (!el) return null;
-    const r = el.getBoundingClientRect();
-    const m = h0 * 60 + Math.floor((((y - r.top - TOP_PAD) / HOUR_PX) * 60) / SLOT) * SLOT;
-    return { day, min: Math.min(Math.max(m, h0 * 60), h1 * 60 - SLOT) };
-  }, (id) => cat(id)?.name ?? '');
+  /* ---------- Gestures ---------- */
+  const minAt = (clientY: number) => {
+    const r = grid.current!.getBoundingClientRect();
+    return h0 * 60 + ((clientY - r.top - TOP_PAD) / HOUR_PX) * 60;
+  };
+  const slotAt = (clientY: number) => Math.max(h0 * 60, Math.min(h1 * 60 - SLOT, Math.floor(minAt(clientY) / SLOT) * SLOT));
+  const boundsOf = (b: Block) => {
+    const others = (b.kind === 'plan' ? plans : logged).filter((o) => o.id !== b.id);
+    let lo = h0 * 60, hi = h1 * 60;
+    for (const o of others) { if (o.endMin <= b.startMin) lo = Math.max(lo, o.endMin); if (o.startMin >= b.endMin) hi = Math.min(hi, o.startMin); }
+    return { lo, hi };
+  };
 
-  const brushCat = brush && brush !== ERASE ? cat(brush) : undefined;
+  const openPick = (from: number, to: number) => {
+    const kind: Kind = planMode ? 'plan' : 'entry';
+    const overlaps = (kind === 'plan' ? plans : logged).some((b) => b.startMin < to && b.endMin > from);
+    setRange({ from, to });
+    setPick({
+      title: `${kind === 'plan' ? 'Plan' : 'Log'} ${fmtHM(from)} – ${fmtHM(to)}`,
+      sub: `${fmtDuration(to - from)} · what ${kind === 'plan' ? 'will it be' : 'was it'}?`,
+      clear: overlaps,
+      apply: (categoryId) => {
+        if (kind === 'plan') {
+          const { before, id } = actions.planPaint(day, from, to, categoryId);
+          setSel(id ? { kind: 'plan', id } : null);
+          showToast(categoryId ? `Planned ${cat(categoryId)?.name} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)} of the plan`, before);
+        } else {
+          const a = msAt(day, from), b = msAt(day, to);
+          const before = actions.paint(a, b, categoryId, Date.now());
+          const made = categoryId ? getData().entries.find((e) => e.categoryId === categoryId && e.start <= a && e.end !== null && e.end >= b) : undefined;
+          setSel(made ? { kind: 'entry', id: made.id } : null);
+          showToast(categoryId ? `Logged ${cat(categoryId)?.name} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)}`, before);
+        }
+        if (categoryId) noteRecent(categoryId);
+      },
+    });
+  };
+
+  const onMove = (clientY: number) => {
+    const g = gesture.current;
+    if (!g) return;
+    g.cy = clientY;
+    const dy = clientY - g.y0;
+    if (Math.abs(dy) > 6) g.moved = true;
+    if (g.type === 'range') {
+      if (!g.moved) return;
+      g.b = slotAt(clientY);
+      setRange({ from: Math.min(g.a, g.b), to: Math.max(g.a, g.b) + SLOT });
+      return;
+    }
+    if (!g.moved || g.type === 'fixed') return;
+    if (g.type === 'press') { g.type = 'move'; setSel({ kind: g.block.kind, id: g.block.id }); }
+    const dm = Math.round(((dy / HOUR_PX) * 60) / SLOT) * SLOT;
+    const { startMin: s0, endMin: e0 } = g.block;
+    let a = s0, b = e0;
+    if (g.type === 'move') { a = Math.max(g.lo, Math.min(g.hi - (e0 - s0), s0 + dm)); b = a + (e0 - s0); }
+    else if (g.type === 'resize-top') a = Math.max(g.lo, Math.min(e0 - SLOT, s0 + dm));
+    else b = Math.min(g.hi, Math.max(s0 + SLOT, e0 + dm));
+    setMoving({ id: g.block.id, startMin: a, endMin: b });
+  };
+
+  // Scroll the page while a finger drags near the top or bottom edge.
+  const autoScroll = () => {
+    const tick = () => {
+      const g = gesture.current;
+      if (!g) return;
+      const bottom = window.innerHeight - 150;
+      const step = g.cy > bottom ? Math.min(14, (g.cy - bottom) / 4 + 3) : g.cy < 90 ? -Math.min(14, (90 - g.cy) / 4 + 3) : 0;
+      if (step) { window.scrollBy(0, step); onMove(g.cy); }
+      requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  };
+
+  const startHold = (e: RPointerEvent<HTMLElement>, block: Block, el: HTMLElement) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (sel) setSel(null);
+    const water = el.querySelector<HTMLElement>('.water');
+    if (water) water.style.transition = 'none';
+    setHolding(block.id);
+    const h = { block, t0: performance.now(), x: e.clientX, y: e.clientY, raf: 0, water };
+    hold.current = h;
+    const step = (t: number) => {
+      if (hold.current !== h) return;
+      const k = Math.min(1, (t - h.t0) / HOLD_MS);
+      const v = k < 0.5 ? 2 * k * k : 1 - Math.pow(-2 * k + 2, 2) / 2;
+      if (h.water) h.water.style.height = `${v * 100}%`;
+      if (k >= 1) finishHold(); else h.raf = requestAnimationFrame(step);
+    };
+    h.raf = requestAnimationFrame(step);
+  };
+  const cancelHold = (quick: boolean) => {
+    const h = hold.current;
+    if (!h) return;
+    hold.current = null;
+    cancelAnimationFrame(h.raf);
+    if (h.water) { h.water.style.transition = 'height .35s ease-in'; h.water.style.height = '0%'; }
+    setHolding(null);
+    if (quick) showToast('Hold the block until it fills');
+  };
+  const finishHold = () => {
+    const h = hold.current;
+    if (!h) return;
+    hold.current = null;
+    const b = h.block;
+    const { before } = actions.completePlan(b.id, Date.now());
+    setHolding(null);
+    try { navigator.vibrate?.(18); } catch { /* not supported */ }
+    showToast(`${b.label || cat(b.categoryId)?.name} done · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
+    const colour = cat(b.categoryId)?.color ?? '#8DBA78';
+    const x0 = isArrow(b) ? 0 : laneOn ? LANE : 0;
+    requestAnimationFrame(() => {
+      const layer = fx.current, c = col.current;
+      if (layer && c) drawPenLines(layer, { x: x0, y: top(b.startMin), w: c.clientWidth - x0, h: top(b.endMin) - top(b.startMin) }, colour);
+    });
+  };
+
+  const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
+    if (e.button > 0 || gesture.current || hold.current) return;
+    const t = e.target as HTMLElement;
+    const gap = t.closest<HTMLElement>('[data-gap]');
+    if (gap) {
+      const [a, b] = gap.dataset.gap!.split('-').map(Number);
+      openPick(a, b);
+      return;
+    }
+    const el = t.closest<HTMLElement>('[data-block]');
+    const block = el ? all.find((b) => b.id === el.dataset.block) : undefined;
+    if (el && block?.ghost) { startHold(e, block, el); return; }
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    if (block) {
+      const handle = t.closest<HTMLElement>('[data-handle]')?.dataset.handle;
+      const type = block.fixed ? 'fixed' : handle === 'top' ? 'resize-top' : handle === 'bot' ? 'resize-bot' : 'press';
+      gesture.current = { type, block, ...boundsOf(block), y0: e.clientY, cy: e.clientY, moved: false };
+    } else {
+      const a = slotAt(e.clientY);
+      gesture.current = { type: 'range', a, b: a, y0: e.clientY, cy: e.clientY, moved: false };
+    }
+    autoScroll();
+  };
+  const onPointerMove = (e: RPointerEvent<HTMLDivElement>) => {
+    const h = hold.current;
+    if (h) { if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) cancelHold(false); return; }
+    onMove(e.clientY);
+  };
+  const onPointerUp = () => {
+    const h = hold.current;
+    if (h) { cancelHold(performance.now() - h.t0 < 250); return; }
+    const g = gesture.current;
+    gesture.current = null;
+    if (!g) return;
+    if (g.type === 'range') {
+      if (!g.moved) { setRange(null); if (sel) setSel(null); else showToast('Drag down the day to add some time'); return; }
+      openPick(Math.min(g.a, g.b), Math.max(g.a, g.b) + SLOT);
+      return;
+    }
+    if (g.type === 'fixed') { if (!g.moved) setEdit({ kind: 'entry', id: g.block.id }); return; }
+    if (g.type === 'press') { setSel(sel?.id === g.block.id ? null : { kind: g.block.kind, id: g.block.id }); return; }
+    const m = moving;
+    setMoving(null);
+    if (!m || (m.startMin === g.block.startMin && m.endMin === g.block.endMin)) return;
+    const before = getData();
+    if (g.block.kind === 'entry') {
+      actions.updateEntry(g.block.id, { start: msAt(day, m.startMin), end: msAt(day, m.endMin) });
+    } else {
+      const id = actions.updatePlanned(g.block.id, { startMin: m.startMin, endMin: m.endMin });
+      setSel({ kind: 'plan', id });
+    }
+    showToast(`${g.type === 'move' ? 'Moved' : 'Resized'} to ${fmtHM(m.startMin)} – ${fmtHM(m.endMin)}`, before);
+  };
+  const onPointerCancel = () => {
+    cancelHold(false);
+    gesture.current = null;
+    setMoving(null);
+    if (!pick) setRange(null);
+  };
+
+  /* ---------- Rendering ---------- */
+  const joins = (b: Block, list: Block[]) => {
+    if (isArrow(b)) return { jt: false, jb: false };
+    const solid = list.filter((o) => o.id !== b.id && !isArrow(o));
+    return { jt: solid.some((o) => Math.abs(o.endMin - b.startMin) < 0.5), jb: solid.some((o) => Math.abs(o.startMin - b.endMin) < 0.5) };
+  };
+
+  const renderBlock = (b: Block, list: Block[]) => {
+    const c = cat(b.categoryId);
+    const { jt, jb } = joins(b, list);
+    const y = top(b.startMin) + (jt ? 0 : 1);
+    const height = Math.max(8, top(b.endMin) - top(b.startMin) - (jt ? 0 : 1) - (jb ? 0 : 1));
+    const r = height < 24 ? 6 : 10;
+    const arrow = isArrow(b);
+    const selected = sel?.id === b.id;
+    const title = b.label || c?.name || 'Untitled';
+    const showSub = !b.ghost && height >= 36;
+    const sub = `${fmtHM(b.startMin)} – ${b.live ? 'now' : fmtHM(b.endMin)}${b.label && c ? ` · ${c.name}` : ''}`;
+    const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', !arrow && laneOn && 'inset', jt && 'jt', jb && 'jb', selected && 'sel',
+      b.live && 'live', b.categoryId === DRIFT_ID && 'drift', height < 24 && 'tiny', moving?.id === b.id && 'lifted', holding === b.id && 'holding'].filter(Boolean).join(' ');
+    return (
+      <div
+        key={b.id} className={cls} data-block={b.id}
+        style={{ top: y, height, ['--c' as string]: c?.color ?? '#ccc', borderRadius: arrow ? 6 : `${jt ? 0 : r}px ${jt ? 0 : r}px ${jb ? 0 : r}px ${jb ? 0 : r}px` }}
+        role="button" tabIndex={0} aria-label={`${b.ghost ? 'Planned: ' : ''}${title}, ${fmtHM(b.startMin)} to ${fmtHM(b.endMin)}${b.ghost ? '. Hold to fill in.' : ''}`}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          if (b.ghost) { const { before } = actions.completePlan(b.id); showToast(`${title} done`, before); }
+          else if (b.kind === 'entry') setEdit({ kind: 'entry', id: b.id });
+          else setSel({ kind: 'plan', id: b.id });
+        }}
+      >
+        {b.ghost && <span className="water" aria-hidden="true"><svg className="wave" viewBox="0 0 120 8" preserveAspectRatio="none"><path d="M0 4Q15 0 30 4T60 4T90 4T120 4V8H0Z" /></svg></span>}
+        {arrow ? (
+          <>
+            <svg className="arr" viewBox={`0 0 20 ${height}`} preserveAspectRatio="none" style={{ height }} aria-hidden="true">
+              <path className="ln" d={`M4 2H14`} />
+              <path className="ln shaft" d={`M9 2V${height - 3}`} />
+              <path className="ln" d={`M5 ${height - 7}L9 ${height - 2}L13 ${height - 7}`} />
+            </svg>
+            <span className="alabel">{title} · {fmtDuration(b.endMin - b.startMin)}</span>
+          </>
+        ) : (
+          <span className="lbl"><strong>{title}</strong>{showSub && <span className="muted">{sub}</span>}</span>
+        )}
+        {selected && !b.fixed && <><i className="hd top" data-handle="top" /><i className="hd bot" data-handle="bot" /></>}
+      </div>
+    );
+  };
+
+  // A + in each unlogged gap between two logged blocks, for time that has already passed.
+  const gaps: { from: number; to: number }[] = [];
+  if (!planMode && day <= today) {
+    const sorted = [...loggedV].sort((a, b) => a.startMin - b.startMin);
+    for (let i = 0; i < sorted.length - 1; i++) {
+      const a = Math.ceil(sorted[i].endMin), b = Math.floor(sorted[i + 1].startMin);
+      if (b - a < SLOT || (nowMin !== null && b > nowMin) || plansV.some((p) => p.startMin < b && p.endMin > a)) continue;
+      gaps.push({ from: a, to: b });
+    }
+  }
+
+  const selBlock = sel ? all.find((b) => b.id === sel.id) : undefined;
   const dayCats = data.timeCategories.filter((c) => totals.byCat[c.id]).sort((a, b) => totals.byCat[b.id] - totals.byCat[a.id]);
-  const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
+  const sub = planMode
+    ? 'Editing the plan for this day'
+    : `${day === today ? `Today · ${fmtHM(minutesOfDay(now))}` : relativeDay(day, today)}${plan.length ? ` · ${doneCount} of ${plan.length} done` : ''}`;
 
   return (
     <>
       <Band>
         <div className="band-row">
-          <h1>Time</h1>
-          <div className="row" style={{ gap: 6 }}>
-            <FlagButton onClick={() => setMEdit({ day })} />
-            <TimeTabs current="time" />
+          <TimeTabs current="time" />
+          <FlagButton onClick={() => setMEdit({ day })} />
+        </div>
+        <div className="band-row day-head">
+          <div style={{ minWidth: 0 }}>
+            <h1>{weekdayLong(day)} {dayNum(day)}</h1>
+            <p className="band-sub">{sub}</p>
+          </div>
+          <div className="band-links">
+          {!planMode && plan.length > 0 && <button type="button" className="band-link" aria-pressed={peek} onClick={() => setPeek(!peek)}>{peek ? 'Hide full plan' : 'Show full plan'}</button>}
+          {planMode
+            ? <button type="button" className="band-link on" onClick={() => setPlanMode(false)}>Done</button>
+            : <button type="button" className="band-link" onClick={() => setPlanMode(true)}>Edit plan</button>}
           </div>
         </div>
         <div className="row" style={{ gap: 2 }}>
           <button className="icon-btn" aria-label="Previous week" onClick={() => setDay(addDays(day, -7))}><IconLeft size={18} /></button>
           <div className="days grow">
-            {weekDays(day).map((d) => (
-              <button key={d} className="day" aria-pressed={d === day} aria-label={`${weekdayLong(d)} ${dayNum(d)}`} onClick={() => setDay(d)}>
-                <small>{weekdayShort(d)}</small>
-                <b>{dayNum(d)}</b>
-                {d === today && d !== day && <span className="has" aria-hidden="true" />}
-              </button>
-            ))}
+            {weekDays(day).map((d) => {
+              const t = templateFor(data.templates, d);
+              return (
+                <button key={d} className="day" aria-pressed={d === day} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
+                  <small>{weekdayShort(d)}</small>
+                  <b>{dayNum(d)}</b>
+                  <em>{t ? t.name.split(' ')[0] : ''}</em>
+                  {d === today && d !== day && <span className="has" aria-hidden="true" />}
+                </button>
+              );
+            })}
           </div>
           <button className="icon-btn" aria-label="Next week" onClick={() => setDay(addDays(day, 7))}><IconRight size={18} /></button>
         </div>
+        {planMode && <PlanControls day={day} />}
       </Band>
 
       <div className="content">
-        {running && (
+        {running && !planMode && (
           <div className="card row">
             <span className="pulse" />
             <div className="grow">
@@ -165,64 +433,76 @@ export function TimeDay() {
 
         <div className="card" style={{ padding: '4px 0 6px' }}>
           <div className="row small muted" style={{ justifyContent: 'space-between', padding: '8px 16px 4px', flexWrap: 'wrap', gap: '2px 10px' }}>
-            <span>{fmtDuration(totals.total)} logged{unlogged > 0 && ` · ${fmtDuration(unlogged)} unlogged`}{wake ? ` · up ${fmtMilestone(wake.min)}` : ''}</span>
+            <span>
+              {planMode
+                ? `${plan.length} planned · ${fmtDuration(plan.reduce((t, p) => t + p.endMin - p.startMin, 0))}`
+                : <>{fmtDuration(totals.total)} logged{unlogged > 0 && ` · ${fmtDuration(unlogged)} unlogged`}{wake ? ` · up ${fmtMilestone(wake.min)}` : ''}</>}
+            </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
             {h0 > 0 && <button className="card-link" onClick={() => setExtra({ ...extra, before: extra.before + 2 })}>Show earlier</button>}
           </div>
-          <div className={`timeline ${brush ? 'painting' : ''}`} ref={grid} style={{ height: TOP_PAD + hours.length * HOUR_PX + 8 }}>
+          <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8 }}>
             {hours.map((hr) => (
-              <div className="hour" key={hr} style={{ height: HOUR_PX }}>
-                <span className="hour-label">{hourLabel(hr)}</span>
-                <button className="hour-slot" tabIndex={brush ? -1 : 0} aria-label={`Add a block at ${hourLabel(hr)}`} onClick={() => setEdit({ kind: 'new', day, startMin: hr * 60 })} />
+              <div key={hr} className={`hr ${hr % 2 ? 'odd' : ''}`} style={{ top: top(hr * 60) }}>
+                {hr % 2 === 0 && <span className="hour-label">{hourLabel(hr)}</span>}
               </div>
             ))}
-            {wake && wake.min > h0 * 60 && <div className="sleep-band" style={{ top: top(h0 * 60), height: clampTop(wake.min) - top(h0 * 60) }} aria-hidden="true" />}
-            {bed && bed.min < h1 * 60 && <div className="sleep-band" style={{ top: clampTop(bed.min), height: top(h1 * 60) - clampTop(bed.min) }} aria-hidden="true" />}
-            {placed.map((p) => {
-              const r = p.render();
-              const height = Math.max(10, ((p.endMin - p.startMin) / 60) * HOUR_PX - 2);
-              const width = `calc((100% - ${GUTTER + 10}px) / ${p.lanes})`;
-              return (
-                <button
-                  key={p.key}
-                  className={`tblock ${r.planned ? 'planned' : ''} ${r.live ? 'live' : ''} ${r.drift ? 'drift' : ''} ${height < 24 ? 'tiny' : ''}`}
-                  style={{
-                    top: top(p.startMin) + 1, height, left: `calc(${GUTTER}px + ${width} * ${p.lane})`, width, right: 'auto',
-                    background: r.planned ? 'transparent' : `color-mix(in srgb, ${r.color} 55%, var(--card))`,
-                    borderColor: r.planned ? r.color : undefined,
-                  }}
-                  tabIndex={brush ? -1 : 0}
-                  onClick={() => setEdit(r.target)}
-                >
-                  <strong>{r.title}</strong>
-                  {height >= 36 && <span className="muted">{r.sub}</span>}
-                </button>
-              );
-            })}
-            {miles.map((m) => (
-              <button key={m.id} type="button" className="ms-chip" tabIndex={brush ? -1 : 0} style={{ top: clampTop(m.min) - 11 }} onClick={() => setMEdit({ day, id: m.id })} aria-label={`${milestoneName(m)} at ${fmtMilestone(m.min)}, edit`}>
+            {!planMode && wake && wake.min > h0 * 60 && <div className="sleep-band" style={{ top: top(h0 * 60), height: clampTop(wake.min) - top(h0 * 60) }} aria-hidden="true" />}
+            {!planMode && bed && bed.min < h1 * 60 && <div className="sleep-band" style={{ top: clampTop(bed.min), height: top(h1 * 60) - clampTop(bed.min) }} aria-hidden="true" />}
+            <div
+              className="tl-col" ref={col} style={{ left: GUTTER }}
+              onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
+              onContextMenu={(e) => e.preventDefault()}
+            >
+              {plansV.map((b) => renderBlock(b, plansV))}
+              {loggedV.map((b) => renderBlock(b, loggedV))}
+              {gaps.map((g) => {
+                const small = top(g.to) - top(g.from) < 30;
+                return (
+                  <button key={g.from} type="button" className={`gap-add ${small ? 'small' : ''}`} data-gap={`${g.from}-${g.to}`}
+                    style={{ top: (top(g.from) + top(g.to)) / 2 - (small ? 10 : 14) }} aria-label={`Log ${fmtHM(g.from)} to ${fmtHM(g.to)}`}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPick(g.from, g.to); } }}>+</button>
+                );
+              })}
+              {range && (
+                <div className="range-preview" style={{ top: top(range.from), height: top(range.to) - top(range.from) }} aria-hidden="true">
+                  <span>{fmtHM(range.from)} – {fmtHM(range.to)}</span><span>{fmtDuration(range.to - range.from)}</span>
+                </div>
+              )}
+              <div className="fx-layer" ref={fx} aria-hidden="true" />
+            </div>
+            {!planMode && miles.map((m) => (
+              <button key={m.id} type="button" className="ms-chip" style={{ top: clampTop(m.min) - 11 }} onClick={() => setMEdit({ day, id: m.id })} aria-label={`${milestoneName(m)} at ${fmtMilestone(m.min)}, edit`}>
                 <MilestoneIcon kind={m.kind} size={12} />{fmtMilestone(m.min).replace(/ (am|pm)$/, '')} {milestoneName(m)}
               </button>
             ))}
             {nowMin !== null && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="now-line" style={{ top: top(nowMin) }} aria-label={`Now, ${fmtHM(nowMin)}`} />}
-            {brush && (
-              <div className="paint-layer" aria-hidden="true" style={{ left: GUTTER }} {...handlers}>
-                {drag && (() => {
-                  const lo = Math.min(drag.a, drag.b);
-                  const hi = Math.max(drag.a, drag.b) + SLOT;
-                  return (
-                    <div className={`paint-preview ${brush === ERASE ? 'erase' : ''}`} style={{ top: top(lo), height: top(hi) - top(lo), background: brushCat ? brushCat.color : undefined }}>
-                      <span>{fmtHM(lo)} – {fmtHM(hi)}</span>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
           </div>
           {h1 < 24 && <button className="card-link more-hours" onClick={() => setExtra({ ...extra, after: extra.after + 2 })}>Show later</button>}
         </div>
 
-        {totals.total > 0 && (
+        {selBlock && (
+          <div className="selbar" role="toolbar" aria-label="Selected block">
+            <div className="grow" style={{ minWidth: 0 }}>
+              <b>{selBlock.label || cat(selBlock.categoryId)?.name}{selBlock.kind === 'plan' ? ' · planned' : ''}</b>
+              <small>{fmtHM(selBlock.startMin)} – {fmtHM(selBlock.endMin)} · {fmtDuration(selBlock.endMin - selBlock.startMin)}</small>
+            </div>
+            {selBlock.kind === 'entry'
+              ? <button type="button" className="btn" onClick={() => setEdit({ kind: 'entry', id: selBlock.id })}>Details</button>
+              : <button type="button" className="btn" onClick={() => setPick({
+                  title: 'Change activity', sub: `${fmtHM(selBlock.startMin)} – ${fmtHM(selBlock.endMin)}`, clear: false,
+                  apply: (c) => { if (!c) return; const before = getData(); const id = actions.updatePlanned(selBlock.id, { categoryId: c }); setSel({ kind: 'plan', id }); noteRecent(c); showToast('Plan updated', before); },
+                })}>Activity</button>}
+            <button type="button" className="btn danger" onClick={() => {
+              const before = selBlock.kind === 'entry' ? actions.deleteEntry(selBlock.id) : actions.deletePlanned(selBlock.id);
+              setSel(null);
+              showToast('Deleted', before);
+            }}>Delete</button>
+            <button type="button" className="btn green" onClick={() => setSel(null)}>Done</button>
+          </div>
+        )}
+
+        {!planMode && totals.total > 0 && (
           <Card title={day === today ? 'Where today went' : 'Where the day went'} action={<button className="card-link quiet" onClick={() => setDial(!dial)} aria-pressed={dial}>{dial ? 'Bar' : 'Dial'}</button>}>
             {dial ? (
               <Dial day={day} entries={entries} cats={data.timeCategories} milestones={miles} now={now} total={totals.total} isToday={day === today} />
@@ -236,13 +516,40 @@ export function TimeDay() {
           </Card>
         )}
         <p className="small muted" style={{ padding: '0 4px' }}>
-          {brush ? 'Scroll by dragging the times on the left.' : 'Pick a colour below, then drag down the day. Tap a block to add a note, or the flag to add a milestone.'}
+          {planMode
+            ? 'Drag down the day to plan some time. Drag a block to move it, tap it to resize. Pick the template for this weekday above.'
+            : 'Hold a dashed block to fill it in. Drag down the day to log something else, drag a block to move it, tap it to resize. Scroll by dragging the times on the left.'}
+          {' '}<button type="button" className="card-link" onClick={() => setEdit({ kind: 'new', day, startMin: Math.floor((nowMin ?? 9 * 60) / SLOT) * SLOT })}>Add with exact times</button>
         </p>
-        <div className="dock-spacer" aria-hidden="true" />
       </div>
-      <PaintDock />
+      <ActivityPicker pick={pick} cats={data.timeCategories} onClose={() => { setPick(null); setRange(null); }} />
       <EntryEditor target={edit} onClose={() => setEdit(null)} />
       <MilestoneEditor target={mEdit} onClose={() => setMEdit(null)} />
     </>
+  );
+}
+
+function ActivityPicker({ pick, cats, onClose }: { pick: Pick | null; cats: TimeCategory[]; onClose: () => void }) {
+  const ordered = [...recent.map((id) => cats.find((c) => c.id === id)).filter((c): c is TimeCategory => Boolean(c)), ...cats.filter((c) => !recent.includes(c.id))];
+  return (
+    <Sheet open={pick !== null} onClose={onClose} label={pick?.title ?? 'Pick an activity'}>
+      {pick && (
+        <div className="stack" style={{ gap: 14 }}>
+          <div>
+            <h2>{pick.title}</h2>
+            <p className="small muted">{pick.sub}</p>
+          </div>
+          <div className="act-grid">
+            {ordered.map((c) => (
+              <button key={c.id} type="button" className={`act-chip ${recent.includes(c.id) ? 'recent' : ''}`} onClick={() => { pick.apply(c.id); onClose(); }}>
+                <span className="swatch" style={{ background: c.color }} />{c.name}
+              </button>
+            ))}
+            {pick.clear && <button type="button" className="act-chip clear" onClick={() => { pick.apply(null); onClose(); }}>Clear this time</button>}
+          </div>
+          <button type="button" className="btn ghost block" onClick={onClose}>Cancel</button>
+        </div>
+      )}
+    </Sheet>
   );
 }
