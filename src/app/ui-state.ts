@@ -53,6 +53,9 @@ export function setDockLabels(v: boolean) {
   try { localStorage.setItem(LABELS_KEY, v ? '1' : '0'); } catch { /* storage blocked: still works this session */ }
 }
 
+/** True once a newer version of the app has been downloaded and is ready to show. */
+export const updateReady = createStore<boolean>(false);
+
 /* Quick add sheet */
 export type AddTab = 'spend' | 'time' | 'task';
 export const quickAdd = createStore<AddTab | null>(null);

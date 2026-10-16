@@ -1,9 +1,12 @@
-// Offline support: cache the app shell, serve it cache-first, refresh in the background.
-const CACHE = 'matcha-planner-v2';
+// Offline support. The app's own files come from the network when it's reachable, so a new version
+// shows up on the next open; the saved copy is used when offline or when the network is too slow.
+const CACHE = 'matcha-planner-v3';
 const SHELL = ['./', 'index.html', 'app.js', 'app.css', 'manifest.webmanifest', 'icon.svg'];
+const SLOW_MS = 3000;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
+  // "reload" skips the browser's HTTP cache, so the new version saves fresh files.
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL.map((u) => new Request(u, { cache: 'reload' })))).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {
@@ -15,19 +18,19 @@ self.addEventListener('activate', (e) => {
 });
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET') return;
-  e.respondWith(
-    caches.match(e.request).then((hit) => {
-      const network = fetch(e.request)
-        .then((res) => {
-          if (res.ok && new URL(e.request.url).origin === location.origin) {
-            const copy = res.clone();
-            caches.open(CACHE).then((c) => c.put(e.request, copy));
-          }
-          return res;
-        })
-        .catch(() => hit);
-      return hit || network;
-    })
-  );
+  const req = e.request;
+  if (req.method !== 'GET' || new URL(req.url).origin !== location.origin) return;
+  e.respondWith((async () => {
+    const cache = await caches.open(CACHE);
+    const network = fetch(req, { cache: 'no-cache' }).then((res) => {
+      if (res.ok) cache.put(req, res.clone());
+      return res;
+    });
+    const slow = new Promise((resolve) => setTimeout(resolve, SLOW_MS));
+    try {
+      const res = await Promise.race([network, slow]);
+      if (res) return res;
+    } catch { /* offline: fall through to the saved copy */ }
+    return (await cache.match(req, { ignoreSearch: true })) || (await cache.match('index.html')) || network;
+  })());
 });
