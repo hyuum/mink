@@ -450,9 +450,15 @@ h1, h2, h3, p { margin: 0; }
 .cat-delete { display: grid; gap: 8px; padding: 10px 12px; margin-left: 36px; border-radius: 12px; background: var(--soft); }
 .cat-delete select { display: block; margin-top: 6px; min-height: 40px; width: 100%; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 0 8px; font-size: 15px; }
 
-/* Plan buttons float over the top-right corner of the day. */
-.plan-fab { position: sticky; top: calc(10px + env(safe-area-inset-top, 0px)); z-index: 6; height: 0; display: flex; justify-content: flex-end; gap: 8px; padding-right: 14px; }
-.plan-fab > button { margin-top: 2px; }
-.fab-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 88%, transparent); color: var(--muted); display: grid; place-items: center; padding: 0; box-shadow: 0 2px 8px rgba(38, 48, 34, .14); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
-.fab-btn[aria-pressed="true"] { background: var(--band); border-color: var(--band); color: var(--band-ink); }
-.fab-pill { min-height: 38px; padding: 0 18px; border-radius: 19px; border: none; background: var(--band); color: var(--band-ink); font-weight: 700; box-shadow: 0 2px 8px rgba(38, 48, 34, .2); }
+/* The plan button sits in the bottom-right corner, above the nav; tapping it opens a small menu. */
+.plan-corner { position: fixed; right: max(16px, calc(50vw - 264px)); bottom: calc(var(--nav-h) + 14px + env(safe-area-inset-bottom, 0px)); z-index: 36; display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.plan-toggle { position: relative; min-height: 40px; padding: 0 16px 0 12px; display: inline-flex; align-items: center; gap: 6px; border-radius: 20px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 14px; font-weight: 700; box-shadow: 0 4px 14px rgba(38, 48, 34, .18); }
+.plan-toggle.on { background: var(--band); border-color: var(--band); color: var(--band-ink); padding: 0 20px; }
+.plan-toggle[aria-expanded="true"] { background: var(--soft); }
+.plan-dot { position: absolute; top: 6px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: var(--band); }
+.plan-menu { position: relative; z-index: 1; display: grid; min-width: 180px; padding: 6px; border-radius: 16px; background: var(--card); border: 1px solid var(--line); box-shadow: 0 8px 24px rgba(38, 48, 34, .2); animation: strip-in .15s ease-out; }
+.plan-menu button { min-height: 44px; display: flex; align-items: center; gap: 10px; padding: 0 12px; border: none; border-radius: 10px; background: none; color: var(--ink); font-size: 15px; text-align: left; }
+.plan-menu button:hover, .plan-menu button:focus-visible { background: var(--soft); }
+.plan-menu button[aria-checked="true"] { color: var(--green-strong); font-weight: 700; }
+.plan-scrim { position: fixed; inset: 0; border: none; background: transparent; padding: 0; z-index: 0; cursor: default; }
+.content:has(+ .plan-corner) { padding-bottom: 52px; }

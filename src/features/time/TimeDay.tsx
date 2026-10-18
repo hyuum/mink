@@ -9,7 +9,7 @@ import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconEye, IconLeft, IconMoon, IconPencil, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconEye, IconLabels, IconLeft, IconMoon, IconPencil, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
@@ -72,6 +72,7 @@ export function TimeDay() {
   const [dial, setDial] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [peek, setPeek] = useState(false);
+  const [planMenu, setPlanMenu] = useState(false);
   const [sel, setSel] = useState<{ kind: Kind; id: ID } | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
@@ -85,7 +86,7 @@ export function TimeDay() {
   const cat = (id: ID): TimeCategory | undefined => data.timeCategories.find((c) => c.id === id);
   const s = data.settings;
 
-  useEffect(() => { setSel(null); setPick(null); setRange(null); }, [day, planMode]);
+  useEffect(() => { setSel(null); setPick(null); setRange(null); setPlanMenu(false); }, [day, planMode]);
   // Keep toasts clear of the selection bar while it's showing.
   useEffect(() => {
     if (!sel) return;
@@ -512,19 +513,6 @@ export function TimeDay() {
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
           </div>
-          {/* Plan controls float over the top corner of the day and stay in reach while scrolling. */}
-          <div className="plan-fab">
-            {planMode ? (
-              <button type="button" className="fab-pill" onClick={() => setPlanMode(false)}>Done</button>
-            ) : (
-              <>
-                {plan.length > 0 && (
-                  <button type="button" className="fab-btn" aria-pressed={peek} aria-label={peek ? 'Hide the full plan' : 'Show the full plan'} title={peek ? 'Hide the full plan' : 'Show the full plan'} onClick={() => setPeek(!peek)}><IconEye size={18} /></button>
-                )}
-                <button type="button" className="fab-btn" aria-label="Edit plan" title="Edit plan" onClick={() => setPlanMode(true)}><IconPencil size={18} /></button>
-              </>
-            )}
-          </div>
           <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8 }}>
             {hours.map((hr) => (
               <div key={hr} className={`hr ${hr % 2 ? 'odd' : ''}`} style={{ top: top(hr * 60) }}>
@@ -614,6 +602,33 @@ export function TimeDay() {
           </Card>
         )}
       </div>
+      {/* The plan lives behind one button in the bottom corner: tap it for the full plan or to edit it. */}
+      {!selBlock && (
+        <div className="plan-corner">
+          {planMode ? (
+            <button type="button" className="plan-toggle on" onClick={() => setPlanMode(false)}>Done</button>
+          ) : (
+            <>
+              {planMenu && <button type="button" className="plan-scrim" aria-label="Close" tabIndex={-1} onClick={() => setPlanMenu(false)} />}
+              {planMenu && (
+                <div className="plan-menu" role="menu" aria-label="Plan">
+                  {plan.length > 0 && (
+                    <button type="button" role="menuitemcheckbox" aria-checked={peek} onClick={() => { setPeek(!peek); setPlanMenu(false); }}>
+                      <IconEye size={16} />{peek ? 'Hide full plan' : 'Show full plan'}
+                    </button>
+                  )}
+                  <button type="button" role="menuitem" onClick={() => { setPlanMode(true); setPlanMenu(false); }}>
+                    <IconPencil size={16} />Edit plan
+                  </button>
+                </div>
+              )}
+              <button type="button" className="plan-toggle" aria-haspopup="menu" aria-expanded={planMenu} onClick={() => setPlanMenu(!planMenu)}>
+                <IconLabels size={16} />Plan{peek && <span className="plan-dot" aria-label="showing the full plan" />}
+              </button>
+            </>
+          )}
+        </div>
+      )}
       <ActivityPicker pick={pick} cats={data.timeCategories} onClose={() => { setPick(null); setRange(null); }} />
       <EntryEditor target={edit} onClose={() => setEdit(null)} />
     </>
