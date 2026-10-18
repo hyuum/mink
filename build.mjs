@@ -40,8 +40,16 @@ const reactGlobals = {
   },
 };
 
+// Each build stamps the service worker's cache name, so installed apps notice every release
+// and show the "new version" bar, even when sw.js itself didn't change.
+const BUILD = Date.now().toString(36);
 async function copyPublic(out) {
-  for (const f of await readdir('public')) await copyFile(join('public', f), join(out, f));
+  for (const f of await readdir('public')) {
+    if (f === 'sw.js') {
+      const sw = await readFile(join('public', f), 'utf8');
+      await writeFile(join(out, f), sw.replace(/const CACHE = '([^']+)';/, `const CACHE = '$1-${BUILD}';`));
+    } else await copyFile(join('public', f), join(out, f));
+  }
 }
 
 function appHtml() {
