@@ -43,6 +43,7 @@ export const IconTrash = (p: P) => <S {...p}><path d="M4 7h16M9 7V4.5h6V7M6.5 7l
 export const IconArrowDown = (p: P) => <S {...p}><path d="M12 4v15M6 13l6 6 6-6" /></S>;
 export const IconEye = (p: P) => <S {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></S>;
 export const IconPencil = (p: P) => <S {...p}><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z" /><path d="M13.5 7l3 3" /></S>;
+export const IconPhone = (p: P) => <S {...p}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></S>;
 export const IconMoon = (p: P) => <S {...p}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></S>;
 export const IconFlag = (p: P) => <S {...p}><path d="M5 21V4M5 4h11l-2.5 4L16 12H5" /></S>;
 export const IconStar = (p: P) => <S {...p}><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" /></S>;

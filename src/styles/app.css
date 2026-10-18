@@ -462,3 +462,17 @@ h1, h2, h3, p { margin: 0; }
 .plan-menu button[aria-checked="true"] { color: var(--green-strong); font-weight: 700; }
 .plan-scrim { position: fixed; inset: 0; border: none; background: transparent; padding: 0; z-index: 0; cursor: default; }
 .content:has(+ .plan-corner) { padding-bottom: 52px; }
+
+/* Phone tracking: suggested blocks are dotted, with a phone icon, until you approve them. */
+.tblock.phone { left: 0; right: 0; z-index: 2; cursor: pointer; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--c) 22%, var(--card)) 0 6px, color-mix(in srgb, var(--c) 10%, var(--card)) 6px 12px); border: 2px dotted color-mix(in srgb, var(--c) 70%, var(--ink)); border-radius: 10px; }
+.tblock.phone .lbl strong { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; }
+.phone-banner { display: flex; align-items: center; gap: 10px; width: 100%; border: none; text-align: left; color: var(--ink); font-size: 14px; }
+.phone-banner b { color: var(--green-strong); }
+.phone-list { display: grid; gap: 8px; max-height: 50vh; overflow-y: auto; }
+.phone-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 14px; }
+.phone-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--done); flex: none; }
+.phone-row b, .phone-app b { display: block; font-size: 14px; }
+.phone-row small, .phone-app small { display: block; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.phone-row select, .phone-app select { flex: none; max-width: 42%; min-height: 38px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 0 6px; font-size: 14px; }
+.phone-access { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--soft); }
+.phone-app { gap: 10px; min-height: 44px; }

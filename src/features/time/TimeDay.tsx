@@ -9,7 +9,8 @@ import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconEye, IconLabels, IconLeft, IconMoon, IconPencil, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconEye, IconLabels, IconLeft, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { PhoneReview, usePhoneSuggestions } from './phone';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
@@ -73,6 +74,7 @@ export function TimeDay() {
   const [planMode, setPlanMode] = useState(false);
   const [peek, setPeek] = useState(false);
   const [planMenu, setPlanMenu] = useState(false);
+  const [review, setReview] = useState<{ focus: string | null } | null>(null);
   const [sel, setSel] = useState<{ kind: Kind; id: ID } | null>(null);
   const [pick, setPick] = useState<Pick | null>(null);
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
@@ -95,6 +97,7 @@ export function TimeDay() {
   }, [sel !== null]);
 
   const stripOpen = planMode || strip;
+  const phone = usePhoneSuggestions(day, today);
   const dayStart = dayStartMs(day);
   const nowMin = day === today ? minutesOfDay(now) : null;
   const entries = entriesForDay(data.entries, day, now);
@@ -273,6 +276,8 @@ export function TimeDay() {
   const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.button > 0 || gesture.current || hold.current) return;
     const t = e.target as HTMLElement;
+    const ph = t.closest<HTMLElement>('[data-phone]');
+    if (ph) { setReview({ focus: ph.dataset.phone! }); return; }
     const gap = t.closest<HTMLElement>('[data-gap]');
     if (gap) {
       const [a, b] = gap.dataset.gap!.split('-').map(Number);
@@ -504,6 +509,13 @@ export function TimeDay() {
             <button type="button" className="btn" onClick={() => { setTipSeen(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* storage blocked */ } }}>Got it</button>
           </div>
         )}
+        {!planMode && phone.length > 0 && (
+          <button type="button" className="card phone-banner" onClick={() => setReview({ focus: null })}>
+            <IconPhone size={18} />
+            <span className="grow">{phone.length === 1 ? '1 stretch' : `${phone.length} stretches`} of phone use to review</span>
+            <b>Review</b>
+          </button>
+        )}
         <div className="card" style={{ padding: '4px 0 6px' }}>
           <div className="row small muted" style={{ justifyContent: 'space-between', padding: '8px 16px 4px', flexWrap: 'wrap', gap: '2px 10px' }}>
             <span>
@@ -528,6 +540,17 @@ export function TimeDay() {
             >
               {plansV.map((b) => renderBlock(b, plansV))}
               {loggedV.map((b) => renderBlock(b, loggedV))}
+              {!planMode && phone.map((s) => {
+                const a = (s.start - dayStart) / 60_000, z = (s.end - dayStart) / 60_000;
+                const h = Math.max(10, top(z) - top(a) - 2);
+                return (
+                  <div key={s.key} className={`tblock phone ${h < 24 ? 'tiny' : ''}`} data-phone={s.key} style={{ top: top(a) + 1, height: h, ['--c' as string]: cat(s.categoryId)?.color ?? '#ccc' }}
+                    role="button" tabIndex={0} aria-label={`Phone use, ${fmtHM(a)} to ${fmtHM(z)}: ${s.apps.map((x) => x.label).join(', ')}. Review.`}
+                    onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReview({ focus: s.key }); } }}>
+                    <span className="lbl"><strong><IconPhone size={12} />{s.apps[0]?.label}{s.apps.length > 1 ? ` +${s.apps.length - 1}` : ''}</strong></span>
+                  </div>
+                );
+              })}
               {gaps.map((g) => {
                 const small = top(g.to) - top(g.from) < 30;
                 return (
@@ -629,6 +652,7 @@ export function TimeDay() {
           )}
         </div>
       )}
+      <PhoneReview open={review !== null} suggestions={phone} focus={review?.focus} cats={data.timeCategories} onClose={() => setReview(null)} />
       <ActivityPicker pick={pick} cats={data.timeCategories} onClose={() => { setPick(null); setRange(null); }} />
       <EntryEditor target={edit} onClose={() => setEdit(null)} />
     </>

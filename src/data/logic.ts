@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PlannedBlock, Priority, SpendKind, Task, TimeEntry } from './types';
+import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Priority, SpendKind, Task, TimeEntry } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 import { DRIFT_ID, MILESTONE_KINDS } from './seed';
 
@@ -178,6 +178,80 @@ export function relinkDay(entries: TimeEntry[], plan: PlannedBlock[], day: Day):
     const { planId: _old, ...rest } = e;
     return p ? { ...rest, planId: p.id } : rest;
   });
+}
+
+/* ---------- Phone tracking ---------- */
+
+/** One stretch of one app on screen, as the Android app reports it. */
+export interface PhoneSession { pkg: string; label: string; start: number; end: number }
+
+/** A stretch of phone use waiting for you to approve it as a block. */
+export interface PhoneSuggestion {
+  key: string;
+  start: number;
+  end: number;
+  categoryId: ID;
+  /** Apps used, longest first, with minutes. */
+  apps: { pkg: string; label: string; min: number }[];
+}
+
+/** The activity an app counts as, or null when it doesn't count. */
+export const phoneCategory = (s: PhoneSettings, pkg: string): ID | null => (pkg in s.apps ? s.apps[pkg] : s.defaultCategoryId);
+
+/**
+ * Turns raw app sessions into suggested blocks: apps that don't count are dropped, sessions with short gaps
+ * between them join up, time you've already logged is cut out, and anything shorter than the minimum or
+ * dismissed before is left out. Times snap to whole minutes.
+ */
+export function phoneSuggestions(sessions: PhoneSession[], entries: TimeEntry[], s: PhoneSettings, dismissed: string[], now: number): PhoneSuggestion[] {
+  const counted = sessions
+    .map((x) => ({ ...x, cat: phoneCategory(s, x.pkg) }))
+    .filter((x): x is PhoneSession & { cat: ID } => x.cat !== null && x.end > x.start)
+    .sort((a, b) => a.start - b.start);
+
+  // Join sessions whose gaps are shorter than the setting.
+  const groups: (typeof counted)[] = [];
+  for (const x of counted) {
+    const g = groups[groups.length - 1];
+    const gEnd = g ? Math.max(...g.map((y) => y.end)) : 0;
+    if (g && x.start - gEnd <= s.gapMin * MIN_MS) g.push(x); else groups.push([x]);
+  }
+
+  const covered = entries
+    .map((e) => [e.start, entryEnd(e, now)] as const)
+    .filter(([a, b]) => b > a)
+    .sort((a, b) => a[0] - b[0]);
+  const floorMin = (t: number) => Math.floor(t / MIN_MS) * MIN_MS;
+  const ceilMin = (t: number) => Math.ceil(t / MIN_MS) * MIN_MS;
+  const gone = new Set(dismissed);
+  const out: PhoneSuggestion[] = [];
+
+  for (const g of groups) {
+    let pieces: [number, number][] = [[floorMin(g[0].start), ceilMin(Math.max(...g.map((y) => y.end)))]];
+    for (const [a, b] of covered) {
+      pieces = pieces.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q] as [number, number]] : [[p, Math.min(a, q)], [Math.max(b, p), q]].filter(([u, v]) => v > u) as [number, number][]));
+    }
+    for (const [p, q] of pieces) {
+      if (q - p < s.minMin * MIN_MS) continue;
+      const key = `phone:${p}`;
+      if (gone.has(key)) continue;
+      const byApp = new Map<string, { pkg: string; label: string; min: number; cat: ID }>();
+      for (const y of g) {
+        const m = (Math.min(y.end, q) - Math.max(y.start, p)) / MIN_MS;
+        if (m <= 0) continue;
+        const cur = byApp.get(y.pkg) ?? { pkg: y.pkg, label: y.label, min: 0, cat: y.cat };
+        cur.min += m;
+        byApp.set(y.pkg, cur);
+      }
+      const apps = [...byApp.values()].sort((a, b) => b.min - a.min);
+      if (!apps.length) continue;
+      const byCat = new Map<ID, number>();
+      for (const a of apps) byCat.set(a.cat, (byCat.get(a.cat) ?? 0) + a.min);
+      const categoryId = [...byCat.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      out.push({ key, start: p, end: q, categoryId, apps: apps.map(({ pkg, label, min }) => ({ pkg, label, min: Math.round(min) })) });
+    }
+  }
+  return out;
 }
 
 /* ---------- Milestones ---------- */

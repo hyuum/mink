@@ -29,6 +29,8 @@ export interface TimeEntry {
   source?: EntrySource;
   /** The planned block this was filled in from, if any. That plan then counts as done. */
   planId?: ID;
+  /** For phone use approved from a suggestion: which suggestion it was. */
+  deviceKey?: string;
 }
 
 /** A block planned on the timeline but not logged yet. */
@@ -117,6 +119,19 @@ export interface Task {
   createdAt: number;
 }
 
+/** Phone tracking, in the Android app: long stretches of phone use become suggested blocks. */
+export interface PhoneSettings {
+  enabled: boolean;
+  /** Shortest stretch of phone use, in minutes, that becomes a suggestion. */
+  minMin: number;
+  /** Gaps shorter than this many minutes join two stretches into one. */
+  gapMin: number;
+  /** Activity for apps without their own setting, or null to not count them. */
+  defaultCategoryId: ID | null;
+  /** Per app (Android package name): the activity it counts as, or null to not count it. */
+  apps: Record<string, ID | null>;
+}
+
 export interface Settings {
   /** First and last hour shown on the day timeline. */
   dayStartHour: number;
@@ -127,6 +142,7 @@ export interface Settings {
   weeklyAllowance: number;
   stickers: boolean;
   theme: 'system' | 'light' | 'dark';
+  phone: PhoneSettings;
 }
 
 export interface AppData {
@@ -139,6 +155,8 @@ export interface AppData {
   templates: DayTemplate[];
   /** Days with their own plan in `planned`. Every other day shows its weekday's template. */
   planDays: Day[];
+  /** Phone-use suggestions you dismissed, so they don't come back. */
+  phoneDismissed: string[];
   milestones: Milestone[];
   expenses: Expense[];
   bills: Bill[];

@@ -1,0 +1,6 @@
+{
+  "appId": "app.matcha.planner",
+  "appName": "Matcha Planner",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#F6F5EE" }
+}

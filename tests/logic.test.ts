@@ -252,3 +252,25 @@ test('deleting an activity moves its time, plans and template blocks', async () 
   assert.equal(getData().entries.length, 0);
   assert.equal(migrate({ version: 2, entries: [], tasks: [], timeCategories: [{ id: 'transport', name: 'Transport', color: '#A9B8A3' }] }).timeCategories[0].color, '#ADA59B');
 });
+
+test('phone sessions become suggestions: ignored apps drop, short gaps join, logged time is cut out', async () => {
+  const { phoneSuggestions } = await import('../src/data/logic.ts');
+  const { defaultPhoneSettings } = await import('../src/data/seed.ts');
+  const day = '2026-10-12';
+  const at = (h: number, m = 0) => msAt(day, h * 60 + m);
+  const s = { ...defaultPhoneSettings(), enabled: true };
+  const sessions = [
+    { pkg: 'com.instagram.android', label: 'Instagram', start: at(9, 0), end: at(9, 20) },
+    { pkg: 'com.google.android.youtube', label: 'YouTube', start: at(9, 21), end: at(9, 40) }, // 1 min gap: joins
+    { pkg: 'com.spotify.music', label: 'Spotify', start: at(10), end: at(11) }, // doesn't count
+    { pkg: 'com.instagram.android', label: 'Instagram', start: at(12), end: at(12, 3) }, // too short
+    { pkg: 'com.whatsapp', label: 'WhatsApp', start: at(14), end: at(14, 30) }, // unknown app: default (Drift)
+  ];
+  const logged: TimeEntry[] = [{ id: 'x', label: '', categoryId: 'uni', start: at(14, 10), end: at(14, 20) }];
+  const out = phoneSuggestions(sessions, logged, s, [], at(20));
+  assert.deepEqual(out.map((x) => [(x.start - at(0)) / 60_000, (x.end - at(0)) / 60_000]), [[540, 580], [840, 850], [860, 870]]);
+  assert.equal(out[0].categoryId, 'drift');
+  assert.deepEqual(out[0].apps.map((a) => a.label), ['Instagram', 'YouTube']);
+  assert.equal(phoneSuggestions(sessions, logged, s, [out[0].key], at(20)).length, 2, 'dismissed ones stay hidden');
+  assert.equal(phoneSuggestions(sessions, logged, { ...s, defaultCategoryId: null }, [], at(20)).length, 1, 'unknown apps can be left out');
+});

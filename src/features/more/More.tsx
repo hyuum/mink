@@ -5,6 +5,7 @@ import { go, showToast } from '../../app/ui-state';
 import { Band, Card, ChipGroup } from '../../ui/kit';
 import { IconArrowDown, IconRight, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
+import { PhoneSettingsCard } from '../time/phone';
 import type { TimeCategory } from '../../data/types';
 
 const STORAGE_TEXT = {
@@ -101,6 +102,8 @@ export function More() {
             <p className="small muted">The weekly allowance is set on the Money screen (tap the allowance under the total).</p>
           </div>
         </Card>
+
+        <PhoneSettingsCard />
 
         <Card title="Your data">
           <div className="stack">

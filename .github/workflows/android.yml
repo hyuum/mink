@@ -1,0 +1,68 @@
+# Builds the Android app (the same planner, plus phone tracking) and puts the install file on the
+# "android-latest" release, so the newest version is always at the same link.
+name: Android app
+
+on:
+  push:
+    branches: [main, claude/chatlog-access-summary-z9a6dl]
+    paths: [src/**, public/**, android/**, tests/**, package.json, package-lock.json, capacitor.config.json, build.mjs, .github/workflows/android.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+          cache: gradle
+
+      - name: Install
+        run: npm ci
+
+      - name: Check
+        run: npm run typecheck && npm test
+
+      - name: Build the web app and copy it into Android
+        run: npm run build && npx cap sync android
+
+      - name: Build the APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
+
+      - name: Publish to the android-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk matcha-planner.apk
+          notes="Install file for Matcha Planner on Android. Built from ${GITHUB_SHA::7} (build ${{ github.run_number }}). Download matcha-planner.apk on your phone and open it."
+          if gh release view android-latest >/dev/null 2>&1; then
+            gh release edit android-latest --notes "$notes"
+          else
+            gh release create android-latest --title "Matcha Planner for Android" --notes "$notes" --target "$GITHUB_SHA"
+          fi
+          gh release upload android-latest matcha-planner.apk --clobber
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: matcha-planner-apk
+          path: matcha-planner.apk

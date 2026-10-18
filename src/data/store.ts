@@ -1,7 +1,7 @@
 // The app's single source of truth: an immutable AppData snapshot, React subscriptions,
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
-import type { AppData, Bill, Expense, ID, Milestone, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry } from './types';
+import type { AppData, Bill, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry } from './types';
 import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, sampleData } from './seed';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
 import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
@@ -89,12 +89,13 @@ export function migrate(raw: unknown): AppData {
     planned,
     templates: arr(d.templates, []),
     planDays,
+    phoneDismissed: arr(d.phoneDismissed, []),
     milestones: arr(d.milestones, []),
     expenses,
     bills,
     lists: arr(d.lists, base.lists),
     tasks: arr(d.tasks, []),
-    settings: { ...base.settings, ...(d.settings ?? {}) },
+    settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) } },
   };
 }
 
@@ -247,6 +248,26 @@ export const actions = {
       return { ...data, entries: [...cleared, { id: entryId, label: p.label, categoryId: p.categoryId, start: from, end: to, source: 'plan', planId: id }] };
     });
     return { before, entryId };
+  },
+
+  /* Phone tracking */
+  /** Approve phone-use suggestions as logged blocks. */
+  approvePhone(items: { key: string; start: number; end: number; categoryId: ID; label: string }[]): AppData {
+    const before = state;
+    update((d) => ({
+      ...d,
+      entries: [...d.entries, ...items.map((x) => ({ id: uid(), label: x.label, categoryId: x.categoryId, start: x.start, end: x.end, source: 'device' as const, deviceKey: x.key }))],
+    }));
+    return before;
+  },
+  /** Hide phone-use suggestions for good. Keeps the most recent 1000. */
+  dismissPhone(keys: string[]): AppData {
+    const before = state;
+    update((d) => ({ ...d, phoneDismissed: [...d.phoneDismissed.filter((k) => !keys.includes(k)), ...keys].slice(-1000) }));
+    return before;
+  },
+  updatePhoneSettings(patch: Partial<PhoneSettings>) {
+    update((d) => ({ ...d, settings: { ...d.settings, phone: { ...d.settings.phone, ...patch } } }));
   },
 
   /* Day templates */

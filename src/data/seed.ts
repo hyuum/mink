@@ -1,5 +1,5 @@
 // Starting data: sensible defaults for a fresh install, plus an optional example week.
-import type { AppData, DayTemplate, Expense, Milestone, MilestoneKind, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry } from './types';
+import type { AppData, DayTemplate, Expense, Milestone, MilestoneKind, PhoneSettings, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry } from './types';
 import { addDays, fromISO, msAt, todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 
@@ -31,6 +31,18 @@ export const CATEGORY_COLORS = ['#8DBA78', '#6E9A5E', '#BFD6A9', '#DCE8CF', '#EE
 
 export const DRIFT_ID = 'drift';
 
+/** Scrolling and video apps count as Drift; music, maps, calls and the camera don't count. Everything else is Drift too. */
+export function defaultPhoneSettings(): PhoneSettings {
+  const drift = ['com.instagram.android', 'com.zhiliaoapp.musically', 'com.ss.android.ugc.trill', 'com.google.android.youtube', 'com.twitter.android',
+    'com.reddit.frontpage', 'com.facebook.katana', 'com.snapchat.android', 'com.pinterest', 'tv.twitch.android.app', 'com.netflix.mediaclient'];
+  const ignore = ['com.spotify.music', 'com.google.android.apps.youtube.music', 'com.google.android.apps.maps', 'com.google.android.dialer',
+    'com.android.dialer', 'com.google.android.deskclock', 'com.google.android.GoogleCamera', 'com.sec.android.app.camera', 'com.samsung.android.dialer'];
+  return {
+    enabled: false, minMin: 5, gapMin: 2, defaultCategoryId: 'drift',
+    apps: Object.fromEntries([...drift.map((p) => [p, 'drift']), ...ignore.map((p) => [p, null])]),
+  };
+}
+
 export const MILESTONE_KINDS: { kind: MilestoneKind; name: string }[] = [
   { kind: 'wake', name: 'Wake up' },
   { kind: 'leave', name: 'Leave home' },
@@ -49,6 +61,7 @@ export function defaultData(): AppData {
     planned: [],
     templates: [],
     planDays: [],
+    phoneDismissed: [],
     milestones: [],
     expenses: [],
     bills: [],
@@ -59,7 +72,7 @@ export function defaultData(): AppData {
       { id: 'chores', name: 'Chores' },
     ],
     tasks: [],
-    settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system' },
+    settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings() },
   };
 }
 
