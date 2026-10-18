@@ -20,7 +20,6 @@ import { drawPenLines } from './doodles';
 const HOUR_PX = 52;
 const TOP_PAD = 12;
 const GUTTER = 58;
-const LANE = 20; // room on the left for arrow activities
 const SLOT = 15;
 const HOLD_MS = 1100;
 
@@ -141,7 +140,6 @@ export function TimeDay() {
   const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
   const hours = Array.from({ length: h1 - h0 + 1 }, (_, i) => h0 + i);
   const isArrow = (b: Block) => Boolean(cat(b.categoryId)?.arrow);
-  const laneOn = all.some(isArrow);
 
   const totals = dayTotals(data.entries, day, now);
   const unlogged = unloggedMin(data.entries, day, s.dayStartHour, s.dayEndHour, day === today ? now : Infinity);
@@ -267,7 +265,7 @@ export function TimeDay() {
     try { navigator.vibrate?.(18); } catch { /* not supported */ }
     showToast(`${b.label || cat(b.categoryId)?.name} done · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
     const colour = cat(b.categoryId)?.color ?? '#8DBA78';
-    const x0 = isArrow(b) ? 0 : laneOn ? LANE : 0;
+    const x0 = 0;
     requestAnimationFrame(() => {
       const layer = fx.current, c = col.current;
       if (layer && c) drawPenLines(layer, { x: x0, y: top(b.startMin), w: c.clientWidth - x0, h: top(b.endMin) - top(b.startMin) }, colour);
@@ -384,7 +382,7 @@ export function TimeDay() {
     const title = b.label || c?.name || 'Untitled';
     const showSub = !b.ghost && height >= 36;
     const sub = `${fmtHM(b.startMin)} – ${b.live ? 'now' : fmtHM(b.endMin)}${b.label && c ? ` · ${c.name}` : ''}`;
-    const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', !arrow && laneOn && 'inset', jt && 'jt', jb && 'jb', selected && 'sel',
+    const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', jt && 'jt', jb && 'jb', selected && 'sel',
       b.live && 'live', b.categoryId === DRIFT_ID && 'drift', height < 24 && 'tiny', moving?.id === b.id && 'lifted', holding === b.id && 'holding'].filter(Boolean).join(' ');
     return (
       <div
@@ -403,21 +401,19 @@ export function TimeDay() {
         {arrow ? (
           <>
             {(() => {
-              // Travel gets a little bus at the start of its arrow; other arrow activities start with a tick.
-              const badge = isTransit(c) && height >= 22;
-              const from = badge ? 19 : 2;
+              // A thick, round, see-through stroke down the middle of the day, like a highlighter pen.
+              const tip = height - 5;
+              const head = Math.min(7, Math.max(3, (height - 8) / 2));
               return (
-                <>
-                  {badge && <span className="arr-badge" aria-hidden="true"><IconBus size={12} /></span>}
-                  <svg className="arr" viewBox={`0 0 20 ${height}`} preserveAspectRatio="none" style={{ height }} aria-hidden="true">
-                    {!badge && <path className="ln" d="M4 2H14" />}
-                    {height - from > 6 && <path className="ln shaft" d={`M9 ${from}V${height - 3}`} />}
-                    <path className="ln" d={`M5 ${height - 7}L9 ${height - 2}L13 ${height - 7}`} />
-                  </svg>
-                </>
+                <svg className="arr" viewBox={`0 0 28 ${height}`} style={{ height }} aria-hidden="true">
+                  <g className="hl-pen">
+                    {tip - head > 6 && <path className="hl shaft" d={`M14 5V${tip - 1}`} />}
+                    <path className="hl" d={`M${14 - head} ${tip - head}L14 ${tip}L${14 + head} ${tip - head}`} />
+                  </g>
+                </svg>
               );
             })()}
-            <span className="alabel">{title} · {fmtDuration(b.endMin - b.startMin)}</span>
+            <span className="alabel">{isTransit(c) && <IconBus size={12} />}{title} · {fmtDuration(b.endMin - b.startMin)}</span>
           </>
         ) : (
           <span className="lbl"><strong>{title}</strong>{showSub && <span className="muted">{sub}</span>}</span>

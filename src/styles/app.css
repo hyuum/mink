@@ -356,7 +356,6 @@ h1, h2, h3, p { margin: 0; }
 .timeline .hr .hour-label { position: absolute; left: 0; width: 50px; padding-right: 0; transform: translateY(-7px); }
 .tl-col { position: absolute; top: 0; bottom: 0; right: 10px; z-index: 1; touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
 .tl-col .tblock { position: absolute; left: 0; right: 0; padding: 4px 10px; overflow: hidden; color: var(--ink); font-size: 12px; line-height: 1.3; cursor: grab; transition: box-shadow .15s, transform .15s; }
-.tl-col .tblock.inset { left: 22px; }
 .tblock .lbl { position: relative; z-index: 2; display: block; pointer-events: none; }
 .tblock .lbl strong { display: block; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tblock .lbl .muted { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -378,8 +377,6 @@ h1, h2, h3, p { margin: 0; }
 .tblock.arrow { background: none; border: none; box-shadow: none; overflow: visible; padding: 0; }
 .tblock.arrow.sel { outline: 2px dashed var(--ink); outline-offset: 1px; box-shadow: none; }
 .tblock .arr { position: absolute; left: 0; top: 0; width: 20px; overflow: visible; z-index: 2; pointer-events: none; }
-.tblock .arr .ln { fill: none; stroke: color-mix(in srgb, var(--c) 55%, var(--ink)); stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
-.tblock.plan.arrow .arr .shaft { stroke-dasharray: 3 4; }
 .tblock .alabel { position: absolute; left: 22px; top: 50%; transform: translateY(-50%); font-size: 11px; font-style: italic; color: var(--muted); white-space: nowrap; z-index: 2; pointer-events: none; }
 .tblock .water { position: absolute; left: 0; right: 0; bottom: 0; height: 0; background: color-mix(in srgb, var(--c) 55%, var(--card)); z-index: 1; pointer-events: none; }
 .tblock.arrow .water { background: color-mix(in srgb, var(--c) 25%, transparent); border-radius: 6px; }
@@ -438,9 +435,12 @@ h1, h2, h3, p { margin: 0; }
 .day-title[aria-expanded="true"] .chev { transform: rotate(90deg); }
 .week-strip { animation: strip-in .18s ease-out; }
 @keyframes strip-in { from { opacity: 0; transform: translateY(-4px); } }
-.tblock .arr-badge { position: absolute; left: 0; top: 0; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; z-index: 3; background: color-mix(in srgb, var(--c) 30%, var(--card)); color: color-mix(in srgb, var(--c) 45%, var(--ink)); border: 1.25px solid color-mix(in srgb, var(--c) 60%, var(--ink)); }
-.tblock .arr .ln { stroke: color-mix(in srgb, var(--c) 75%, var(--ink)); stroke-width: 1.8; }
-.tblock .alabel { color: color-mix(in srgb, var(--c) 45%, var(--ink)); font-style: normal; font-weight: 700; }
+.tl-col .tblock.arrow .arr { left: 50%; width: 28px; transform: translateX(-50%); }
+.tblock .arr .hl-pen { opacity: .72; }
+.tblock .arr .hl { fill: none; stroke: var(--c); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
+.tblock.plan.arrow .arr .hl-pen { opacity: .55; }
+.tblock.plan.arrow .arr .hl.shaft { stroke-dasharray: 6 10; }
+.tl-col .tblock.arrow .alabel { left: calc(50% + 20px); display: inline-flex; align-items: center; gap: 4px; color: color-mix(in srgb, var(--c) 45%, var(--ink)); font-style: normal; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .week-strip { animation: none; } .day-title .chev { transition: none; } }
 
 /* More › Time categories */
