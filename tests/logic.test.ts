@@ -232,3 +232,23 @@ test('migrate gives old saves plan days, the new palette and travel arrows', () 
   assert.equal(t.color, '#123456', 'a colour you picked yourself stays');
   assert.equal(t.arrow, true);
 });
+
+test('deleting an activity moves its time, plans and template blocks', async () => {
+  const { actions, getData } = await import('../src/data/store.ts');
+  const d = defaultData();
+  d.entries = [{ id: 'e', label: '', categoryId: 'chores', start: 0, end: 60_000 }];
+  d.planned = [{ id: 'p', label: '', categoryId: 'chores', day: '2026-10-12', startMin: 60, endMin: 120 }];
+  d.planDays = ['2026-10-12'];
+  d.templates = [{ id: 't', name: 'X', weekdays: [], blocks: [{ label: '', categoryId: 'chores', startMin: 0, endMin: 30 }] }];
+  actions.restore(d);
+  actions.deleteTimeCategory('chores', 'rest');
+  const a = getData();
+  assert.ok(!a.timeCategories.some((c) => c.id === 'chores'));
+  assert.equal(a.entries[0].categoryId, 'rest');
+  assert.equal(a.planned[0].categoryId, 'rest');
+  assert.equal(a.templates[0].blocks[0].categoryId, 'rest');
+  actions.restore(d);
+  actions.deleteTimeCategory('chores', null);
+  assert.equal(getData().entries.length, 0);
+  assert.equal(migrate({ version: 2, entries: [], tasks: [], timeCategories: [{ id: 'transport', name: 'Transport', color: '#A9B8A3' }] }).timeCategories[0].color, '#6FAFC0');
+});

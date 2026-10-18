@@ -38,6 +38,9 @@ export const IconSun = (p: P) => <S {...p}><circle cx="12" cy="12" r="4" /><path
 export const IconLeave = (p: P) => <S {...p}><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h9" /></S>;
 export const IconPin = (p: P) => <S {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.2" /></S>;
 export const IconLunch = (p: P) => <S {...p}><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 21V3c-2.2 1.2-3 3.8-3 7h3" /></S>;
+export const IconBus = (p: P) => <S {...p}><rect x="5" y="3.5" width="14" height="14" rx="3" /><path d="M5 10.5h14M8 17.5v3M16 17.5v3M8.5 14h.01M15.5 14h.01" /></S>;
+export const IconTrash = (p: P) => <S {...p}><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" /></S>;
+export const IconArrowDown = (p: P) => <S {...p}><path d="M12 4v15M6 13l6 6 6-6" /></S>;
 export const IconMoon = (p: P) => <S {...p}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></S>;
 export const IconFlag = (p: P) => <S {...p}><path d="M5 21V4M5 4h11l-2.5 4L16 12H5" /></S>;
 export const IconStar = (p: P) => <S {...p}><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" /></S>;

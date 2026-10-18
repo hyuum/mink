@@ -3,7 +3,9 @@ import { useState, type ChangeEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
 import { go, showToast } from '../../app/ui-state';
 import { Band, Card, ChipGroup } from '../../ui/kit';
-import { IconRight } from '../../ui/icons';
+import { IconArrowDown, IconRight, IconTrash } from '../../ui/icons';
+import { CATEGORY_COLORS } from '../../data/seed';
+import type { TimeCategory } from '../../data/types';
 
 const STORAGE_TEXT = {
   indexeddb: 'Saved on this device.',
@@ -89,13 +91,8 @@ export function More() {
 
         <Card title="Time categories">
           <div className="stack">
-            {data.timeCategories.map((c) => (
-              <label key={c.id} className="row" htmlFor={`tc-${c.id}`}>
-                <span className="swatch" style={{ background: c.color, width: 14, height: 14 }} />
-                <span className="sr-only">Name</span>
-                <input id={`tc-${c.id}`} defaultValue={c.name} onBlur={(e) => e.target.value.trim() && actions.renameTimeCategory(c.id, e.target.value.trim())} className="grow" style={{ minHeight: 40, border: '1.5px solid var(--line)', borderRadius: 10, padding: '0 10px', background: 'var(--card)', color: 'var(--ink)', fontSize: 15 }} />
-              </label>
-            ))}
+            <p className="small muted">Tap a colour dot to change it. The arrow button draws an activity as a thin arrow on the day, like travel.</p>
+            {data.timeCategories.map((c) => <CategoryRow key={c.id} c={c} all={data.timeCategories} />)}
             <form className="row" onSubmit={(e) => { e.preventDefault(); if (newCat.trim()) { actions.addTimeCategory(newCat.trim()); setNewCat(''); } }}>
               <label htmlFor="new-tc" className="sr-only">New category</label>
               <input id="new-tc" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="New category" className="grow" style={{ minHeight: 40, border: '1.5px dashed var(--line)', borderRadius: 10, padding: '0 10px', background: 'transparent', color: 'var(--ink)', fontSize: 15 }} />
@@ -151,5 +148,57 @@ export function More() {
         </Card>
       </div>
     </>
+  );
+}
+
+/** One activity: colour, name, drawn as an arrow or a block, and delete (moving its time somewhere else). */
+function CategoryRow({ c, all }: { c: TimeCategory; all: TimeCategory[] }) {
+  const data = useData();
+  const [colours, setColours] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const others = all.filter((x) => x.id !== c.id);
+  const [moveTo, setMoveTo] = useState<string>(others[0]?.id ?? '');
+  const used = data.entries.filter((e) => e.categoryId === c.id).length
+    + data.planned.filter((p) => p.categoryId === c.id).length
+    + data.templates.reduce((n, t) => n + t.blocks.filter((b) => b.categoryId === c.id).length, 0);
+  const remove = () => {
+    const before = actions.deleteTimeCategory(c.id, used ? moveTo || null : null);
+    showToast(used && moveTo ? `Deleted ${c.name}. Its time moved to ${all.find((x) => x.id === moveTo)?.name}.` : `Deleted ${c.name}`, before);
+  };
+  return (
+    <div className="cat-row">
+      <div className="row">
+        <button type="button" className="cat-dot" style={{ background: c.color }} aria-label={`Colour for ${c.name}`} aria-expanded={colours} onClick={() => setColours(!colours)} />
+        <label className="sr-only" htmlFor={`tc-${c.id}`}>Name</label>
+        <input id={`tc-${c.id}`} defaultValue={c.name} onBlur={(e) => e.target.value.trim() && actions.renameTimeCategory(c.id, e.target.value.trim())} className="grow cat-name" />
+        <button type="button" className="icon-btn cat-tool" aria-pressed={Boolean(c.arrow)} aria-label={`Draw ${c.name} as an arrow`} title="Draw as an arrow" onClick={() => actions.updateTimeCategory(c.id, { arrow: !c.arrow })}><IconArrowDown size={18} /></button>
+        {others.length > 0 && <button type="button" className="icon-btn cat-tool" aria-label={`Delete ${c.name}`} aria-expanded={deleting} onClick={() => setDeleting(!deleting)}><IconTrash size={18} /></button>}
+      </div>
+      {colours && (
+        <div className="cat-colours" role="radiogroup" aria-label={`Colour for ${c.name}`}>
+          {CATEGORY_COLORS.map((col) => (
+            <button key={col} type="button" role="radio" aria-checked={col.toUpperCase() === c.color.toUpperCase()} aria-label={col} style={{ background: col }}
+              onClick={() => { actions.updateTimeCategory(c.id, { color: col }); setColours(false); }} />
+          ))}
+        </div>
+      )}
+      {deleting && (
+        <div className="cat-delete">
+          {used > 0 ? (
+            <label htmlFor={`mv-${c.id}`} className="small">
+              {c.name} is used {used} {used === 1 ? 'time' : 'times'}. Move that time to
+              <select id={`mv-${c.id}`} value={moveTo} onChange={(e) => setMoveTo(e.target.value)}>
+                {others.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                <option value="">Nothing (delete that time too)</option>
+              </select>
+            </label>
+          ) : <p className="small">{c.name} isn't used anywhere yet.</p>}
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn danger" onClick={remove}>Delete {c.name}</button>
+            <button type="button" className="btn ghost" onClick={() => setDeleting(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

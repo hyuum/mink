@@ -9,7 +9,7 @@ import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconLeft, IconMoon, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconBus, IconLeft, IconMoon, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
@@ -43,6 +43,9 @@ type Gesture =
   | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; y0: number; cy: number; moved: boolean };
 interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
 
+/** Travel-like activities get a bus at the start of their arrow. */
+const isTransit = (c?: TimeCategory) => Boolean(c && (c.id === 'transport' || /transport|travel|commute|bus|train|tram|drive|uber/i.test(c.name)));
+
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
 
@@ -60,6 +63,16 @@ export function TimeDay() {
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [sleepDrag, setSleepDrag] = useState<{ kind: 'wake' | 'bed'; min: number } | null>(null);
   const [tipSeen, setTipSeen] = useState(readTipSeen);
+  // The week strip stays tucked away: it shows while planning, after a swipe to another day, or when you tap the date.
+  const [strip, setStrip] = useState(false);
+  const stripTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const swipe = useRef<{ x: number; y: number } | null>(null);
+  const flashStrip = (ms = 2500) => {
+    setStrip(true);
+    clearTimeout(stripTimer.current);
+    if (ms) stripTimer.current = setTimeout(() => setStrip(false), ms);
+  };
+  useEffect(() => () => clearTimeout(stripTimer.current), []);
   const [dial, setDial] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [peek, setPeek] = useState(false);
@@ -84,6 +97,7 @@ export function TimeDay() {
     return () => { document.documentElement.style.removeProperty('--dock-space'); };
   }, [sel !== null]);
 
+  const stripOpen = planMode || strip;
   const dayStart = dayStartMs(day);
   const nowMin = day === today ? minutesOfDay(now) : null;
   const entries = entriesForDay(data.entries, day, now);
@@ -388,11 +402,21 @@ export function TimeDay() {
         {b.ghost && <span className="water" aria-hidden="true"><svg className="wave" viewBox="0 0 120 8" preserveAspectRatio="none"><path d="M0 4Q15 0 30 4T60 4T90 4T120 4V8H0Z" /></svg></span>}
         {arrow ? (
           <>
-            <svg className="arr" viewBox={`0 0 20 ${height}`} preserveAspectRatio="none" style={{ height }} aria-hidden="true">
-              <path className="ln" d={`M4 2H14`} />
-              <path className="ln shaft" d={`M9 2V${height - 3}`} />
-              <path className="ln" d={`M5 ${height - 7}L9 ${height - 2}L13 ${height - 7}`} />
-            </svg>
+            {(() => {
+              // Travel gets a little bus at the start of its arrow; other arrow activities start with a tick.
+              const badge = isTransit(c) && height >= 22;
+              const from = badge ? 19 : 2;
+              return (
+                <>
+                  {badge && <span className="arr-badge" aria-hidden="true"><IconBus size={12} /></span>}
+                  <svg className="arr" viewBox={`0 0 20 ${height}`} preserveAspectRatio="none" style={{ height }} aria-hidden="true">
+                    {!badge && <path className="ln" d="M4 2H14" />}
+                    {height - from > 6 && <path className="ln shaft" d={`M9 ${from}V${height - 3}`} />}
+                    <path className="ln" d={`M5 ${height - 7}L9 ${height - 2}L13 ${height - 7}`} />
+                  </svg>
+                </>
+              );
+            })()}
             <span className="alabel">{title} · {fmtDuration(b.endMin - b.startMin)}</span>
           </>
         ) : (
@@ -426,9 +450,24 @@ export function TimeDay() {
         <div className="band-row">
           <TimeTabs current="time" />
         </div>
-        <div className="band-row day-head">
+        <div
+          className="band-row day-head swipe-zone"
+          onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
+          onPointerUp={(e) => {
+            const st = swipe.current;
+            swipe.current = null;
+            if (!st) return;
+            const dx = e.clientX - st.x, dy = e.clientY - st.y;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) { setDay(addDays(day, dx < 0 ? 1 : -1)); flashStrip(); }
+          }}
+          onPointerCancel={() => { swipe.current = null; }}
+        >
           <div style={{ minWidth: 0 }}>
-            <h1>{weekdayLong(day)} {dayNum(day)}</h1>
+            <h1>
+              <button type="button" className="day-title" aria-expanded={stripOpen} aria-label={`${weekdayLong(day)} ${dayNum(day)}. Show the week`} onClick={() => (strip ? setStrip(false) : flashStrip(0))}>
+                {weekdayLong(day)} {dayNum(day)}<span className="chev" aria-hidden="true"><IconRight size={16} /></span>
+              </button>
+            </h1>
             <p className="band-sub">{sub}</p>
           </div>
           <div className="band-links">
@@ -438,7 +477,7 @@ export function TimeDay() {
             : <button type="button" className="band-link" onClick={() => setPlanMode(true)}>Edit plan</button>}
           </div>
         </div>
-        <div className="row" style={{ gap: 2 }}>
+        {stripOpen && <div className="row week-strip" style={{ gap: 2 }}>
           <button className="icon-btn" aria-label="Previous week" onClick={() => setDay(addDays(day, -7))}><IconLeft size={18} /></button>
           <div className="days grow">
             {weekDays(day).map((d) => {
@@ -454,7 +493,7 @@ export function TimeDay() {
             })}
           </div>
           <button className="icon-btn" aria-label="Next week" onClick={() => setDay(addDays(day, 7))}><IconRight size={18} /></button>
-        </div>
+        </div>}
         {planMode && <PlanControls day={day} />}
       </Band>
 
@@ -473,7 +512,7 @@ export function TimeDay() {
 
         {!tipSeen && (
           <div className="card day-tip">
-            <p>Drag down the day to add time. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left.</p>
+            <p>Drag down the day to add time. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left, and swipe the date sideways to change day.</p>
             <button type="button" className="btn" onClick={() => { setTipSeen(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* storage blocked */ } }}>Got it</button>
           </div>
         )}

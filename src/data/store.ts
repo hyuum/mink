@@ -1,8 +1,8 @@
 // The app's single source of truth: an immutable AppData snapshot, React subscriptions,
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
-import type { AppData, Bill, Expense, ID, Milestone, PlannedBlock, Settings, SpendKind, Task, TimeEntry } from './types';
-import { DEFAULT_TIME_CATEGORIES, EXTRA_COLORS, OLD_DEFAULT_COLORS, defaultData, sampleData } from './seed';
+import type { AppData, Bill, Expense, ID, Milestone, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry } from './types';
+import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, sampleData } from './seed';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
 import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
 import { uid } from '../lib/id';
@@ -71,7 +71,7 @@ export function migrate(raw: unknown): AppData {
     // Move untouched default colours to the matcha and sakura palette, and draw travel as an arrow.
     const def = DEFAULT_TIME_CATEGORIES.find((x) => x.id === c.id);
     if (!def) return c;
-    const recolour = OLD_DEFAULT_COLORS[c.id]?.toUpperCase() === c.color?.toUpperCase();
+    const recolour = Boolean(OLD_DEFAULT_COLORS[c.id]?.some((x) => x.toUpperCase() === c.color?.toUpperCase()));
     return { ...c, color: recolour ? def.color : c.color, arrow: c.arrow ?? def.arrow };
   });
   if ((d.version ?? 1) < 2) {
@@ -391,7 +391,30 @@ export const actions = {
     update((d) => ({ ...d, timeCategories: replace(d.timeCategories, id, { name }) }));
   },
   addTimeCategory(name: string) {
-    update((d) => ({ ...d, timeCategories: [...d.timeCategories, { id: uid(), name, color: EXTRA_COLORS[d.timeCategories.length % EXTRA_COLORS.length] }] }));
+    update((d) => {
+      const unused = CATEGORY_COLORS.find((c) => !d.timeCategories.some((x) => x.color.toUpperCase() === c.toUpperCase()));
+      const color = unused ?? CATEGORY_COLORS[d.timeCategories.length % CATEGORY_COLORS.length];
+      return { ...d, timeCategories: [...d.timeCategories, { id: uid(), name, color }] };
+    });
+  },
+  updateTimeCategory(id: ID, patch: Partial<Omit<TimeCategory, 'id'>>) {
+    update((d) => ({ ...d, timeCategories: replace<TimeCategory>(d.timeCategories, id, patch) }));
+  },
+  /** Delete an activity. Its logged time, plans and template blocks move to `moveTo`, or are removed when it's null. */
+  deleteTimeCategory(id: ID, moveTo: ID | null): AppData {
+    const before = state;
+    update((d) => {
+      const move = <T extends { categoryId: ID }>(list: T[]) =>
+        moveTo ? list.map((x) => (x.categoryId === id ? { ...x, categoryId: moveTo } : x)) : list.filter((x) => x.categoryId !== id);
+      return unlinkMissing({
+        ...d,
+        timeCategories: remove(d.timeCategories, id),
+        entries: move(d.entries),
+        planned: move(d.planned),
+        templates: d.templates.map((t) => ({ ...t, blocks: move(t.blocks) })),
+      });
+    });
+    return before;
   },
   /** Start fresh: keep categories, lists and settings, clear every record. */
   startFresh() {
