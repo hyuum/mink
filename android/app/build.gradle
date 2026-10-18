@@ -18,19 +18,22 @@ android {
         }
     }
     // Every build must be signed with the same key, or Android refuses to install it as an update.
-    // A key in GitHub secrets wins; otherwise the key in this folder is used.
+    // The key is committed only encrypted (release.jks.enc); CI unlocks it with the ANDROID_KEY_PASSPHRASE
+    // secret and passes its path here. Local builds without it fall back to the debug key.
+    def releaseStore = System.getenv('ANDROID_KEYSTORE_PATH')
     signingConfigs {
         release {
-            def secretStore = System.getenv('ANDROID_KEYSTORE_PATH')
-            storeFile secretStore ? file(secretStore) : file('matcha-release.jks')
-            storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD') ?: 'matcha-planner'
-            keyAlias System.getenv('ANDROID_KEY_ALIAS') ?: 'matcha'
-            keyPassword System.getenv('ANDROID_KEY_PASSWORD') ?: 'matcha-planner'
+            if (releaseStore) {
+                storeFile file(releaseStore)
+                storePassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+                keyAlias 'matcha'
+                keyPassword System.getenv('ANDROID_KEYSTORE_PASSWORD')
+            }
         }
     }
     buildTypes {
         release {
-            signingConfig signingConfigs.release
+            signingConfig releaseStore ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

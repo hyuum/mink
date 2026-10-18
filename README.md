@@ -34,7 +34,7 @@ The same planner also ships as an Android app, built by GitHub Actions (`.github
 - **Move your data across:** in the web app, More › Back up my data and copy it; in the Android app, More › Restore from a backup and paste.
 - **Phone tracking:** More › Phone tracking › turn on "Suggest blocks from phone use", then allow **Usage access** for Matcha Planner. Stretches of phone use show up on the Day view as dotted blocks; tap one, or "Review" at the top, to approve (as any activity) or dismiss them. Settings: the shortest stretch that counts, how short a break gets joined over, what unlisted apps count as, and an activity (or "Don't count") for each app you used this week. It only reads which app was on screen and when, never what's inside it.
 - **Code:** `android/` is the Capacitor project; `PhoneUsagePlugin.java` reads Android's usage stats, `src/lib/phone.ts` is the bridge, `phoneSuggestions` in `src/data/logic.ts` turns sessions into suggestions, and `src/features/time/phone.tsx` has the review sheet and settings.
-- **Signing:** every build is signed with `android/app/matcha-release.jks` so updates install over each other. To use your own private key instead, add it to the build through the `ANDROID_KEYSTORE_PATH`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS` and `ANDROID_KEY_PASSWORD` environment variables (switching keys means uninstalling once).
+- **Signing:** every build is signed with the same private key so updates install over each other. The key is committed only encrypted (`android/app/release.jks.enc`); the build unlocks it with the `ANDROID_KEY_PASSPHRASE` Actions secret, which is also the key's password. Keep that passphrase somewhere safe: without it, new builds can't update the installed app.
 
 ## How the code is laid out
 

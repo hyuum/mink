@@ -41,10 +41,22 @@ jobs:
       - name: Build the web app and copy it into Android
         run: npm run build && npx cap sync android
 
+      - name: Unlock the signing key
+        env:
+          PASSPHRASE: ${{ secrets.ANDROID_KEY_PASSPHRASE }}
+        run: |
+          if [ -z "$PASSPHRASE" ]; then
+            echo "::error::Add the ANDROID_KEY_PASSPHRASE secret (Settings › Secrets and variables › Actions) so builds are signed with the private key."
+            exit 1
+          fi
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in android/app/release.jks.enc -out "$RUNNER_TEMP/release.jks" -pass env:PASSPHRASE
+
       - name: Build the APK
         working-directory: android
         env:
           VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PATH: ${{ runner.temp }}/release.jks
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEY_PASSPHRASE }}
         run: |
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace

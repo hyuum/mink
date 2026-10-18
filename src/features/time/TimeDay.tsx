@@ -9,7 +9,7 @@ import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconEye, IconLabels, IconLeft, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconEye, IconLabels, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { PhoneReview, usePhoneSuggestions } from './phone';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
@@ -417,6 +417,7 @@ export function TimeDay() {
                 </svg>
               );
             })()}
+            {b.label && <span className="anote">{b.label}</span>}
           </>
         ) : (
           <span className="lbl"><strong>{title}</strong></span>
@@ -470,8 +471,18 @@ export function TimeDay() {
             <p className="band-sub">{sub}</p>
           </div>
         </div>
-        {stripOpen && <div className="row week-strip" style={{ gap: 2 }}>
-          <button className="icon-btn" aria-label="Previous week" onClick={() => setDay(addDays(day, -7))}><IconLeft size={18} /></button>
+        {stripOpen && <div
+          className="row week-strip swipe-zone" style={{ gap: 2 }}
+          onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
+          onPointerUp={(e) => {
+            const st = swipe.current;
+            swipe.current = null;
+            if (!st) return;
+            const dx = e.clientX - st.x, dy = e.clientY - st.y;
+            if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) { setDay(addDays(day, dx < 0 ? 7 : -7)); flashStrip(4000); }
+          }}
+          onPointerCancel={() => { swipe.current = null; }}
+        >
           <div className="days grow">
             {weekDays(day).map((d) => {
               const t = templateFor(data.templates, d);
@@ -485,7 +496,6 @@ export function TimeDay() {
               );
             })}
           </div>
-          <button className="icon-btn" aria-label="Next week" onClick={() => setDay(addDays(day, 7))}><IconRight size={18} /></button>
         </div>}
         {planMode && <PlanControls day={day} />}
       </Band>
@@ -586,6 +596,7 @@ export function TimeDay() {
                 </div>
               );
             })}
+            {nowMin !== null && nowMin > h0 * 60 && !planMode && <div className="past-shade" style={{ top: 0, height: clampTop(nowMin) }} aria-hidden="true" />}
             {nowMin !== null && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="now-line" style={{ top: top(nowMin) }} aria-label={`Now, ${fmtHM(nowMin)}`} />}
           </div>
         </div>

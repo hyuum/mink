@@ -476,3 +476,8 @@ h1, h2, h3, p { margin: 0; }
 .phone-row select, .phone-app select { flex: none; max-width: 42%; min-height: 38px; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 0 6px; font-size: 14px; }
 .phone-access { display: grid; gap: 8px; padding: 12px; border-radius: 12px; background: var(--soft); }
 .phone-app { gap: 10px; min-height: 44px; }
+
+/* Quieter past: today's time before "now" sits under a light paper wash. */
+.past-shade { position: absolute; left: 50px; right: 0; z-index: 3; pointer-events: none; background: color-mix(in srgb, var(--card) 42%, transparent); }
+/* An arrow's note sits beside it; arrows without one stay unlabelled. */
+.tl-col .tblock.arrow .anote { position: absolute; left: calc(50% + 18px); top: 50%; transform: translateY(-50%); max-width: calc(50% - 22px); font-size: 11px; font-style: italic; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; z-index: 2; }
