@@ -232,15 +232,15 @@ export const actions = {
     });
     return { before, id };
   },
-  /** Fill in a planned block: logs it exactly as planned, replacing anything logged in that time. */
-  completePlan(planId: ID, now = Date.now()): { before: AppData; entryId: ID | null } {
+  /** Fill in a planned block: logs it as planned (from `fromMin` if part was already logged), replacing anything logged in that time. */
+  completePlan(planId: ID, now = Date.now(), fromMin?: number): { before: AppData; entryId: ID | null } {
     const before = state;
     let entryId: ID | null = null;
     update((d) => {
       const { data, id } = own(d, planId);
       const p = data.planned.find((x) => x.id === id);
       if (!p) return d;
-      const from = msAt(p.day, p.startMin);
+      const from = msAt(p.day, Math.max(p.startMin, Math.min(p.endMin - 1, fromMin ?? p.startMin)));
       const to = msAt(p.day, p.endMin);
       entryId = uid();
       const cleared = paintRange(data.entries, from, to, null, now, uid);

@@ -126,7 +126,6 @@ export function sampleData(now: number = Date.now()): AppData {
   for (let d = -13; d <= 0; d++) {
     const i = (d + 14) % 7;
     mark(d, 'wake', wakes[i]);
-    if (pattern[i] === shiftDay) { mark(d, 'leave', h(8, 15)); mark(d, 'arrive', h(9)); mark(d, 'home', h(17, 30)); }
     mark(d, 'bed', beds[i]);
   }
 

@@ -2,7 +2,7 @@
 // wake-up times and bedtimes across the week. You can paint straight into any column.
 import { useRef } from 'react';
 import { useData } from '../../data/store';
-import { avgMin, bedOf, donePlanIds, entriesForDay, entryEnd, milestonesForDay, planForDay, rangeSummary, wakeOf, weekDays } from '../../data/logic';
+import { avgMin, bedOf, donePlanIds, entriesForDay, entryEnd, planForDay, rangeSummary, wakeOf, weekDays } from '../../data/logic';
 import { DRIFT_ID } from '../../data/seed';
 import { addDays, dayNum, dayStartMs, fmtDuration, fmtHM, minutesOfDay, monthOf, monthShort, todayISO, weekStart, weekdayLong, weekdayShort } from '../../lib/dates';
 import { ERASE, go, timeDay, useNow } from '../../app/ui-state';
@@ -113,9 +113,6 @@ export function TimeWeek() {
                   })}
                   {planForDay(data, d).filter((p) => !done.has(p.id) && (d > today || (d === today && p.endMin > minutesOfDay(now)))).map((p) => (
                     <span key={p.id} className="spread-blk planned" style={{ top: y(p.startMin) + 0.5, height: y(p.endMin) - y(p.startMin) - 1, borderColor: cat(p.categoryId)?.color }} />
-                  ))}
-                  {milestonesForDay(data.milestones, d).filter((m) => m.kind !== 'wake' && m.kind !== 'bed').map((m) => (
-                    <span key={m.id} className="spread-ms" style={{ top: y(m.min) - 3 }} title={fmtMilestone(m.min)} />
                   ))}
                   {d === today && <span className="spread-now" style={{ top: y(minutesOfDay(now)) }} />}
                   {drag && drag.day === d && (

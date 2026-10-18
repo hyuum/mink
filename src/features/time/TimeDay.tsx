@@ -3,15 +3,15 @@
 // to fill it in. "Edit plan" switches the timeline to the plan on its own, with templates.
 import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, useData } from '../../data/store';
-import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, milestoneName, milestonesForDay, planForDay, runningEntry, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
+import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import { DRIFT_ID } from '../../data/seed';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconLeft, IconRight, IconStop } from '../../ui/icons';
+import { IconLeft, IconMoon, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { EntryEditor, type EditTarget } from './EntryEditor';
-import { FlagButton, MilestoneEditor, MilestoneIcon, fmtMilestone, type MilestoneTarget } from './Milestones';
+import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
 import { TimeTabs } from './TimeTabs';
 import { PlanControls } from './PlanControls';
@@ -43,6 +43,9 @@ type Gesture =
   | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; y0: number; cy: number; moved: boolean };
 interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
 
+const TIP_KEY = 'matcha.dayTip';
+const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
+
 /** Activities picked recently come first in the picker. */
 let recent: ID[] = [];
 const noteRecent = (id: ID) => { recent = [id, ...recent.filter((r) => r !== id)].slice(0, 3); };
@@ -55,8 +58,8 @@ export function TimeDay() {
   const day = timeDay.use() ?? today;
   const setDay = (d: string) => timeDay.set(d === today ? null : d);
   const [edit, setEdit] = useState<EditTarget | null>(null);
-  const [mEdit, setMEdit] = useState<MilestoneTarget>(null);
-  const [extra, setExtra] = useState({ before: 0, after: 0 });
+  const [sleepDrag, setSleepDrag] = useState<{ kind: 'wake' | 'bed'; min: number } | null>(null);
+  const [tipSeen, setTipSeen] = useState(readTipSeen);
   const [dial, setDial] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [peek, setPeek] = useState(false);
@@ -99,17 +102,26 @@ export function TimeDay() {
       fixed: e.end === null || e.start < dayStart || end > dayStart + 24 * 3_600_000, live: e.end === null, ghost: false,
     };
   });
-  const plans: Block[] = shownPlans.map((p) => ({ kind: 'plan', id: p.id, categoryId: p.categoryId, label: p.label, startMin: p.startMin, endMin: p.endMin, fixed: false, live: false, ghost: !planMode }));
+  const loggedSorted = [...logged].sort((a, b) => a.startMin - b.startMin);
+  // While recording, a planned block shows only from where logged time stops covering it.
+  const visibleFrom = (start: number) => { let s = start; for (const b of loggedSorted) if (b.startMin <= s + 0.5 && b.endMin > s) s = b.endMin; return s; };
+  const plans: Block[] = shownPlans
+    .map((p): Block => ({ kind: 'plan', id: p.id, categoryId: p.categoryId, label: p.label, startMin: planMode ? p.startMin : Math.ceil(visibleFrom(p.startMin)), endMin: p.endMin, fixed: false, live: false, ghost: !planMode }))
+    .filter((b) => b.endMin - b.startMin >= 5);
   const withMove = (b: Block) => (moving && moving.id === b.id ? { ...b, startMin: moving.startMin, endMin: moving.endMin } : b);
   const loggedV = logged.map(withMove);
   const plansV = plans.map(withMove);
   const all = [...plansV, ...loggedV];
 
-  let h0 = s.dayStartHour - extra.before;
-  let h1 = s.dayEndHour + extra.after;
-  const miles = milestonesForDay(data.milestones, day);
+  const wake = wakeOf(data.milestones, day);
+  const bed = bedOf(data.milestones, day);
+  const wakeMin = sleepDrag?.kind === 'wake' ? sleepDrag.min : wake?.min;
+  const bedMin = sleepDrag?.kind === 'bed' ? sleepDrag.min : bed?.min;
+  // The day runs from waking up to bedtime, with an hour of room either side to drag them further.
+  let h0 = wakeMin !== undefined ? Math.floor(wakeMin / 60) - 1 : s.dayStartHour;
+  let h1 = bedMin !== undefined ? Math.ceil(Math.min(bedMin, 24 * 60) / 60) + 1 : s.dayEndHour;
   for (const b of all) { h0 = Math.min(h0, Math.floor(b.startMin / 60)); h1 = Math.max(h1, Math.ceil(b.endMin / 60)); }
-  for (const m of miles) { h0 = Math.min(h0, Math.floor(m.min / 60)); h1 = Math.max(h1, Math.min(24, Math.ceil((m.min + 1) / 60))); }
+  if (nowMin !== null) { h0 = Math.min(h0, Math.floor(nowMin / 60)); h1 = Math.max(h1, Math.ceil(nowMin / 60)); }
   h0 = Math.max(0, h0); h1 = Math.min(24, Math.max(h1, h0 + 1));
   const top = (min: number) => TOP_PAD + ((min - h0 * 60) / 60) * HOUR_PX;
   const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
@@ -117,8 +129,6 @@ export function TimeDay() {
   const isArrow = (b: Block) => Boolean(cat(b.categoryId)?.arrow);
   const laneOn = all.some(isArrow);
 
-  const wake = wakeOf(data.milestones, day);
-  const bed = bedOf(data.milestones, day);
   const totals = dayTotals(data.entries, day, now);
   const unlogged = unloggedMin(data.entries, day, s.dayStartHour, s.dayEndHour, day === today ? now : Infinity);
 
@@ -238,7 +248,7 @@ export function TimeDay() {
     if (!h) return;
     hold.current = null;
     const b = h.block;
-    const { before } = actions.completePlan(b.id, Date.now());
+    const { before } = actions.completePlan(b.id, Date.now(), b.startMin);
     setHolding(null);
     try { navigator.vibrate?.(18); } catch { /* not supported */ }
     showToast(`${b.label || cat(b.categoryId)?.name} done · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
@@ -311,6 +321,37 @@ export function TimeDay() {
     if (!pick) setRange(null);
   };
 
+  /* ---------- Wake-up and bedtime tags ---------- */
+  const sleepGesture = useRef<{ kind: 'wake' | 'bed'; y0: number; at: number; moved: boolean } | null>(null);
+  const saveSleep = (kind: 'wake' | 'bed', min: number) => {
+    const before = getData();
+    actions.addMilestone({ kind, label: '', day, min });
+    showToast(`${kind === 'wake' ? 'Woke up' : 'Bed'} ${fmtMilestone(min)}`, before);
+  };
+  const startSleepDrag = (e: RPointerEvent<HTMLButtonElement>, kind: 'wake' | 'bed', at: number) => {
+    e.preventDefault();
+    e.currentTarget.setPointerCapture(e.pointerId);
+    sleepGesture.current = { kind, y0: e.clientY, at, moved: false };
+  };
+  const moveSleepDrag = (e: RPointerEvent<HTMLButtonElement>) => {
+    const g = sleepGesture.current;
+    if (!g) return;
+    const dy = e.clientY - g.y0;
+    if (Math.abs(dy) > 4) g.moved = true;
+    if (!g.moved) return;
+    const min = Math.max(0, Math.min(24 * 60, Math.round((Math.min(g.at, 24 * 60) + (dy / HOUR_PX) * 60) / 5) * 5));
+    setSleepDrag({ kind: g.kind, min });
+  };
+  const endSleepDrag = (kind: 'wake' | 'bed', current: number | undefined, at: number) => {
+    const g = sleepGesture.current;
+    sleepGesture.current = null;
+    const dragged = sleepDrag?.kind === kind ? sleepDrag.min : null;
+    setSleepDrag(null);
+    if (g?.moved && dragged !== null) saveSleep(kind, dragged);
+    else if (current === undefined) saveSleep(kind, at);
+    else showToast(`Drag the tag to change your ${kind === 'wake' ? 'wake-up time' : 'bedtime'}`);
+  };
+
   /* ---------- Rendering ---------- */
   const joins = (b: Block, list: Block[]) => {
     if (isArrow(b)) return { jt: false, jb: false };
@@ -339,7 +380,7 @@ export function TimeDay() {
         onKeyDown={(e) => {
           if (e.key !== 'Enter' && e.key !== ' ') return;
           e.preventDefault();
-          if (b.ghost) { const { before } = actions.completePlan(b.id); showToast(`${title} done`, before); }
+          if (b.ghost) { const { before } = actions.completePlan(b.id, Date.now(), b.startMin); showToast(`${title} done`, before); }
           else if (b.kind === 'entry') setEdit({ kind: 'entry', id: b.id });
           else setSel({ kind: 'plan', id: b.id });
         }}
@@ -384,7 +425,6 @@ export function TimeDay() {
       <Band>
         <div className="band-row">
           <TimeTabs current="time" />
-          <FlagButton onClick={() => setMEdit({ day })} />
         </div>
         <div className="band-row day-head">
           <div style={{ minWidth: 0 }}>
@@ -407,7 +447,7 @@ export function TimeDay() {
                 <button key={d} className="day" aria-pressed={d === day} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
                   <small>{weekdayShort(d)}</small>
                   <b>{dayNum(d)}</b>
-                  <em>{t ? t.name.split(' ')[0] : ''}</em>
+                  {planMode && <em>{t ? t.name.split(' ')[0] : ''}</em>}
                   {d === today && d !== day && <span className="has" aria-hidden="true" />}
                 </button>
               );
@@ -431,15 +471,20 @@ export function TimeDay() {
           </div>
         )}
 
+        {!tipSeen && (
+          <div className="card day-tip">
+            <p>Drag down the day to add time. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left.</p>
+            <button type="button" className="btn" onClick={() => { setTipSeen(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* storage blocked */ } }}>Got it</button>
+          </div>
+        )}
         <div className="card" style={{ padding: '4px 0 6px' }}>
           <div className="row small muted" style={{ justifyContent: 'space-between', padding: '8px 16px 4px', flexWrap: 'wrap', gap: '2px 10px' }}>
             <span>
               {planMode
                 ? `${plan.length} planned · ${fmtDuration(plan.reduce((t, p) => t + p.endMin - p.startMin, 0))}`
-                : <>{fmtDuration(totals.total)} logged{unlogged > 0 && ` · ${fmtDuration(unlogged)} unlogged`}{wake ? ` · up ${fmtMilestone(wake.min)}` : ''}</>}
+                : <>{fmtDuration(totals.total)} logged{unlogged > 0 && ` · ${fmtDuration(unlogged)} unlogged`}</>}
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
-            {h0 > 0 && <button className="card-link" onClick={() => setExtra({ ...extra, before: extra.before + 2 })}>Show earlier</button>}
           </div>
           <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8 }}>
             {hours.map((hr) => (
@@ -447,8 +492,8 @@ export function TimeDay() {
                 {hr % 2 === 0 && <span className="hour-label">{hourLabel(hr)}</span>}
               </div>
             ))}
-            {!planMode && wake && wake.min > h0 * 60 && <div className="sleep-band" style={{ top: top(h0 * 60), height: clampTop(wake.min) - top(h0 * 60) }} aria-hidden="true" />}
-            {!planMode && bed && bed.min < h1 * 60 && <div className="sleep-band" style={{ top: clampTop(bed.min), height: top(h1 * 60) - clampTop(bed.min) }} aria-hidden="true" />}
+            {!planMode && wakeMin !== undefined && wakeMin > h0 * 60 && <div className="sleep-band" style={{ top: top(h0 * 60), height: clampTop(wakeMin) - top(h0 * 60) }} aria-hidden="true" />}
+            {!planMode && bedMin !== undefined && bedMin < h1 * 60 && <div className="sleep-band" style={{ top: clampTop(bedMin), height: top(h1 * 60) - clampTop(bedMin) }} aria-hidden="true" />}
             <div
               className="tl-col" ref={col} style={{ left: GUTTER }}
               onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerCancel}
@@ -471,14 +516,28 @@ export function TimeDay() {
               )}
               <div className="fx-layer" ref={fx} aria-hidden="true" />
             </div>
-            {!planMode && miles.map((m) => (
-              <button key={m.id} type="button" className="ms-chip" style={{ top: clampTop(m.min) - 11 }} onClick={() => setMEdit({ day, id: m.id })} aria-label={`${milestoneName(m)} at ${fmtMilestone(m.min)}, edit`}>
-                <MilestoneIcon kind={m.kind} size={12} />{fmtMilestone(m.min).replace(/ (am|pm)$/, '')} {milestoneName(m)}
-              </button>
-            ))}
+            {!planMode && (['wake', 'bed'] as const).map((kind) => {
+              const min = kind === 'wake' ? wakeMin : bedMin;
+              const at = min ?? (kind === 'wake' ? h0 * 60 : h1 * 60);
+              return (
+                <div key={kind} className={`sleep-marker ${kind} ${min === undefined ? 'unset' : ''} ${sleepDrag?.kind === kind ? 'dragging' : ''}`} style={{ top: clampTop(at) }}>
+                  <button
+                    type="button" className="sm-tab"
+                    aria-label={min === undefined ? `Set ${kind === 'wake' ? 'wake-up' : 'bedtime'}` : `${kind === 'wake' ? 'Woke up' : 'Bed'} at ${fmtMilestone(min)}. Drag to change.`}
+                    onPointerDown={(e) => startSleepDrag(e, kind, at)} onPointerMove={moveSleepDrag} onPointerUp={() => endSleepDrag(kind, min, at)} onPointerCancel={() => { sleepGesture.current = null; setSleepDrag(null); }}
+                    onKeyDown={(e) => {
+                      const step = e.key === 'ArrowUp' ? -5 : e.key === 'ArrowDown' ? 5 : 0;
+                      if (step) { e.preventDefault(); saveSleep(kind, Math.max(0, Math.min(24 * 60, at + step))); }
+                    }}
+                  >
+                    {kind === 'wake' ? <IconSun size={12} /> : <IconMoon size={12} />}
+                    {min === undefined ? (kind === 'wake' ? 'Up?' : 'Bed?') : fmtMilestone(min).replace(/ (am|pm)$/, '')}
+                  </button>
+                </div>
+              );
+            })}
             {nowMin !== null && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="now-line" style={{ top: top(nowMin) }} aria-label={`Now, ${fmtHM(nowMin)}`} />}
           </div>
-          {h1 < 24 && <button className="card-link more-hours" onClick={() => setExtra({ ...extra, after: extra.after + 2 })}>Show later</button>}
         </div>
 
         {selBlock && (
@@ -505,7 +564,7 @@ export function TimeDay() {
         {!planMode && totals.total > 0 && (
           <Card title={day === today ? 'Where today went' : 'Where the day went'} action={<button className="card-link quiet" onClick={() => setDial(!dial)} aria-pressed={dial}>{dial ? 'Bar' : 'Dial'}</button>}>
             {dial ? (
-              <Dial day={day} entries={entries} cats={data.timeCategories} milestones={miles} now={now} total={totals.total} isToday={day === today} />
+              <Dial day={day} entries={entries} cats={data.timeCategories} milestones={[wake, bed].filter((m): m is NonNullable<typeof m> => Boolean(m))} now={now} total={totals.total} isToday={day === today} />
             ) : (
               <Bar height={10} segments={[...dayCats.map((c) => ({ value: totals.byCat[c.id], color: c.color })), { value: unlogged, color: 'var(--track)' }]} max={totals.total + unlogged} />
             )}
@@ -515,16 +574,9 @@ export function TimeDay() {
             </div>
           </Card>
         )}
-        <p className="small muted" style={{ padding: '0 4px' }}>
-          {planMode
-            ? 'Drag down the day to plan some time. Drag a block to move it, tap it to resize. Pick the template for this weekday above.'
-            : 'Hold a dashed block to fill it in. Drag down the day to log something else, drag a block to move it, tap it to resize. Scroll by dragging the times on the left.'}
-          {' '}<button type="button" className="card-link" onClick={() => setEdit({ kind: 'new', day, startMin: Math.floor((nowMin ?? 9 * 60) / SLOT) * SLOT })}>Add with exact times</button>
-        </p>
       </div>
       <ActivityPicker pick={pick} cats={data.timeCategories} onClose={() => { setPick(null); setRange(null); }} />
       <EntryEditor target={edit} onClose={() => setEdit(null)} />
-      <MilestoneEditor target={mEdit} onClose={() => setMEdit(null)} />
     </>
   );
 }

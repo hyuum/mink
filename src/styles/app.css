@@ -420,3 +420,16 @@ h1, h2, h3, p { margin: 0; }
 .update-bar { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 20px; background: var(--ink); color: var(--paper); font-size: 14px; box-shadow: var(--shadow); white-space: nowrap; max-width: calc(100% - 24px); }
 .update-bar button { border: none; background: var(--paper); color: var(--ink); font-weight: 700; border-radius: 14px; padding: 6px 12px; }
 .update-bar button.later { background: none; color: var(--paper); font-weight: 400; text-decoration: underline; text-underline-offset: 3px; padding: 6px 4px; }
+
+/* Wake-up and bedtime: a dashed line with a tag in the hour column you drag up or down. */
+.sleep-marker { position: absolute; left: 0; right: 10px; height: 0; z-index: 4; pointer-events: none; }
+.sleep-marker::after { content: ""; position: absolute; left: 58px; right: 0; border-top: 1.5px dashed color-mix(in srgb, var(--muted) 60%, transparent); }
+.sm-tab { position: absolute; left: 2px; top: -12px; height: 24px; min-width: 54px; display: inline-flex; align-items: center; justify-content: center; gap: 3px; padding: 0 7px; border-radius: 12px; border: 1px solid var(--line); background: var(--card); color: var(--ink); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; pointer-events: auto; touch-action: none; cursor: ns-resize; box-shadow: 0 1px 3px rgba(38, 48, 34, .18); }
+.sm-tab::before { content: ""; position: absolute; inset: -10px -4px; }
+.sleep-marker.unset .sm-tab { border-style: dashed; color: var(--muted); font-weight: 400; box-shadow: none; }
+.sleep-marker.unset::after { opacity: .45; }
+.sleep-marker.dragging .sm-tab { background: var(--ink); color: var(--card); border-color: var(--ink); }
+.day-tip { display: flex; gap: 12px; align-items: flex-start; font-size: 13px; color: var(--muted); }
+.day-tip p { flex: 1; line-height: 1.45; }
+.day-tip svg { vertical-align: -2px; }
+.day-tip .btn { min-height: 34px; padding: 0 12px; flex: none; }
