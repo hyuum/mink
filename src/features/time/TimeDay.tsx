@@ -9,7 +9,7 @@ import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconBus, IconLeft, IconMoon, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconEye, IconLeft, IconMoon, IconPencil, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
@@ -41,9 +41,6 @@ type Gesture =
   | { type: 'range'; a: number; b: number; y0: number; cy: number; moved: boolean }
   | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; y0: number; cy: number; moved: boolean };
 interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
-
-/** Travel-like activities get a bus at the start of their arrow. */
-const isTransit = (c?: TimeCategory) => Boolean(c && (c.id === 'transport' || /transport|travel|commute|bus|train|tram|drive|uber/i.test(c.name)));
 
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
@@ -380,8 +377,9 @@ export function TimeDay() {
     const arrow = isArrow(b);
     const selected = sel?.id === b.id;
     const title = b.label || c?.name || 'Untitled';
-    const showSub = !b.ghost && height >= 36;
-    const sub = `${fmtHM(b.startMin)} – ${b.live ? 'now' : fmtHM(b.endMin)}${b.label && c ? ` · ${c.name}` : ''}`;
+    // An arrow reaches down to the next block when it starts soon after, so it points at where you went.
+    const next = arrow ? all.filter((o) => !isArrow(o) && o.startMin >= b.endMin - 0.5 && o.startMin - b.endMin <= 30).reduce((m, o) => Math.min(m, o.startMin), Infinity) : Infinity;
+    const reach = Number.isFinite(next) ? Math.max(height, top(next) - y) : height;
     const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', jt && 'jt', jb && 'jb', selected && 'sel',
       b.live && 'live', b.categoryId === DRIFT_ID && 'drift', height < 24 && 'tiny', moving?.id === b.id && 'lifted', holding === b.id && 'holding'].filter(Boolean).join(' ');
     return (
@@ -402,10 +400,10 @@ export function TimeDay() {
           <>
             {(() => {
               // A thick, round, see-through stroke down the middle of the day, like a highlighter pen.
-              const tip = height - 5;
-              const head = Math.min(7, Math.max(3, (height - 8) / 2));
+              const tip = reach - (Number.isFinite(next) ? 2 : 5);
+              const head = Math.min(7, Math.max(3, (reach - 8) / 2));
               return (
-                <svg className="arr" viewBox={`0 0 28 ${height}`} style={{ height }} aria-hidden="true">
+                <svg className="arr" viewBox={`0 0 28 ${reach}`} style={{ height: reach }} aria-hidden="true">
                   <g className="hl-pen">
                     {tip - head > 6 && <path className="hl shaft" d={`M14 5V${tip - 1}`} />}
                     <path className="hl" d={`M${14 - head} ${tip - head}L14 ${tip}L${14 + head} ${tip - head}`} />
@@ -413,10 +411,9 @@ export function TimeDay() {
                 </svg>
               );
             })()}
-            <span className="alabel">{isTransit(c) && <IconBus size={12} />}{title} · {fmtDuration(b.endMin - b.startMin)}</span>
           </>
         ) : (
-          <span className="lbl"><strong>{title}</strong>{showSub && <span className="muted">{sub}</span>}</span>
+          <span className="lbl"><strong>{title}</strong></span>
         )}
         {selected && !b.fixed && <><i className="hd top" data-handle="top" /><i className="hd bot" data-handle="bot" /></>}
       </div>
@@ -466,12 +463,6 @@ export function TimeDay() {
             </h1>
             <p className="band-sub">{sub}</p>
           </div>
-          <div className="band-links">
-          {!planMode && plan.length > 0 && <button type="button" className="band-link" aria-pressed={peek} onClick={() => setPeek(!peek)}>{peek ? 'Hide full plan' : 'Show full plan'}</button>}
-          {planMode
-            ? <button type="button" className="band-link on" onClick={() => setPlanMode(false)}>Done</button>
-            : <button type="button" className="band-link" onClick={() => setPlanMode(true)}>Edit plan</button>}
-          </div>
         </div>
         {stripOpen && <div className="row week-strip" style={{ gap: 2 }}>
           <button className="icon-btn" aria-label="Previous week" onClick={() => setDay(addDays(day, -7))}><IconLeft size={18} /></button>
@@ -520,6 +511,19 @@ export function TimeDay() {
                 : <>{fmtDuration(totals.total)} logged{unlogged > 0 && ` · ${fmtDuration(unlogged)} unlogged`}</>}
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
+          </div>
+          {/* Plan controls float over the top corner of the day and stay in reach while scrolling. */}
+          <div className="plan-fab">
+            {planMode ? (
+              <button type="button" className="fab-pill" onClick={() => setPlanMode(false)}>Done</button>
+            ) : (
+              <>
+                {plan.length > 0 && (
+                  <button type="button" className="fab-btn" aria-pressed={peek} aria-label={peek ? 'Hide the full plan' : 'Show the full plan'} title={peek ? 'Hide the full plan' : 'Show the full plan'} onClick={() => setPeek(!peek)}><IconEye size={18} /></button>
+                )}
+                <button type="button" className="fab-btn" aria-label="Edit plan" title="Edit plan" onClick={() => setPlanMode(true)}><IconPencil size={18} /></button>
+              </>
+            )}
           </div>
           <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8 }}>
             {hours.map((hr) => (

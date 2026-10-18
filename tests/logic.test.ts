@@ -250,5 +250,5 @@ test('deleting an activity moves its time, plans and template blocks', async () 
   actions.restore(d);
   actions.deleteTimeCategory('chores', null);
   assert.equal(getData().entries.length, 0);
-  assert.equal(migrate({ version: 2, entries: [], tasks: [], timeCategories: [{ id: 'transport', name: 'Transport', color: '#A9B8A3' }] }).timeCategories[0].color, '#6FAFC0');
+  assert.equal(migrate({ version: 2, entries: [], tasks: [], timeCategories: [{ id: 'transport', name: 'Transport', color: '#A9B8A3' }] }).timeCategories[0].color, '#ADA59B');
 });

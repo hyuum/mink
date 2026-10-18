@@ -345,10 +345,6 @@ h1, h2, h3, p { margin: 0; }
 
 /* Day timeline: one column. Logged blocks are solid, planned ones dashed. Blocks that touch join square. */
 .day-head { align-items: flex-end; flex-wrap: wrap; row-gap: 4px; }
-.band-links { display: flex; gap: 14px; justify-content: flex-end; margin-left: auto; }
-.band-link { border: none; background: none; color: var(--band-muted); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; padding: 6px 2px; min-height: 32px; }
-.band-link[aria-pressed="true"] { color: var(--band-ink); }
-.band-link.on { background: var(--band-chip-on); color: var(--band-chip-on-ink); text-decoration: none; font-weight: 700; padding: 6px 16px; border-radius: 16px; }
 .timeline .hr { position: absolute; left: 0; right: 0; height: 0; pointer-events: none; }
 .timeline .hr::after { content: ""; position: absolute; left: 58px; right: 10px; border-top: 1px solid var(--line); }
 .timeline .hr.odd::after { border-top-style: dotted; }
@@ -440,7 +436,6 @@ h1, h2, h3, p { margin: 0; }
 .tblock .arr .hl { fill: none; stroke: var(--c); stroke-width: 8; stroke-linecap: round; stroke-linejoin: round; }
 .tblock.plan.arrow .arr .hl-pen { opacity: .55; }
 .tblock.plan.arrow .arr .hl.shaft { stroke-dasharray: 6 10; }
-.tl-col .tblock.arrow .alabel { left: calc(50% + 20px); display: inline-flex; align-items: center; gap: 4px; color: color-mix(in srgb, var(--c) 45%, var(--ink)); font-style: normal; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .week-strip { animation: none; } .day-title .chev { transition: none; } }
 
 /* More › Time categories */
@@ -454,3 +449,10 @@ h1, h2, h3, p { margin: 0; }
 .cat-colours button[aria-checked="true"] { box-shadow: 0 0 0 2.5px var(--ink); }
 .cat-delete { display: grid; gap: 8px; padding: 10px 12px; margin-left: 36px; border-radius: 12px; background: var(--soft); }
 .cat-delete select { display: block; margin-top: 6px; min-height: 40px; width: 100%; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--ink); padding: 0 8px; font-size: 15px; }
+
+/* Plan buttons float over the top-right corner of the day. */
+.plan-fab { position: sticky; top: calc(10px + env(safe-area-inset-top, 0px)); z-index: 6; height: 0; display: flex; justify-content: flex-end; gap: 8px; padding-right: 14px; }
+.plan-fab > button { margin-top: 2px; }
+.fab-btn { width: 38px; height: 38px; border-radius: 50%; border: 1px solid var(--line); background: color-mix(in srgb, var(--card) 88%, transparent); color: var(--muted); display: grid; place-items: center; padding: 0; box-shadow: 0 2px 8px rgba(38, 48, 34, .14); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+.fab-btn[aria-pressed="true"] { background: var(--band); border-color: var(--band); color: var(--band-ink); }
+.fab-pill { min-height: 38px; padding: 0 18px; border-radius: 19px; border: none; background: var(--band); color: var(--band-ink); font-weight: 700; box-shadow: 0 2px 8px rgba(38, 48, 34, .2); }

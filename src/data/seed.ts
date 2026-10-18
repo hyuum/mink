@@ -11,7 +11,7 @@ export const DEFAULT_TIME_CATEGORIES: TimeCategory[] = [
   { id: 'uni', name: 'Uni', color: '#8DBA78' },
   { id: 'work', name: 'Work', color: '#6E9A5E' },
   { id: 'friends', name: 'Friends', color: '#EE9BB2' },
-  { id: 'transport', name: 'Transport', color: '#6FAFC0', arrow: true },
+  { id: 'transport', name: 'Transport', color: '#ADA59B', arrow: true },
   { id: 'meals', name: 'Meals', color: '#F4DDB0' },
   { id: 'health', name: 'Exercise', color: '#E58AA6' },
   { id: 'chores', name: 'Chores', color: '#BFD6A9' },
@@ -22,12 +22,12 @@ export const DEFAULT_TIME_CATEGORIES: TimeCategory[] = [
 
 /** Colours earlier versions used by default, so saves that never changed them move to the current palette. */
 export const OLD_DEFAULT_COLORS: Record<string, string[]> = {
-  uni: ['#9CC488'], work: ['#6E9A5E'], friends: ['#EE9BB2'], transport: ['#93B9D6', '#A9B8A3'], meals: ['#F2C38B'],
+  uni: ['#9CC488'], work: ['#6E9A5E'], friends: ['#EE9BB2'], transport: ['#93B9D6', '#A9B8A3', '#6FAFC0'], meals: ['#F2C38B'],
   health: ['#F2A68E'], chores: ['#D4C49A'], rest: ['#C9B3E6'], personal: ['#D9A3C6'], drift: ['#B8B2C2'],
 };
 
 /** Colours you can pick for an activity, and hand out in turn to new ones. */
-export const CATEGORY_COLORS = ['#8DBA78', '#6E9A5E', '#BFD6A9', '#DCE8CF', '#EE9BB2', '#E58AA6', '#F6C3D1', '#D9A3C6', '#F4DDB0', '#6FAFC0', '#CFC8CB'];
+export const CATEGORY_COLORS = ['#8DBA78', '#6E9A5E', '#BFD6A9', '#DCE8CF', '#EE9BB2', '#E58AA6', '#F6C3D1', '#D9A3C6', '#F4DDB0', '#6FAFC0', '#ADA59B', '#CFC8CB'];
 
 export const DRIFT_ID = 'drift';
 
