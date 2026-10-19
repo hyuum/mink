@@ -29,7 +29,7 @@ export function Dial({ day, entries, cats, milestones, now, total, isToday }: {
     <svg viewBox="0 0 300 300" width="100%" style={{ maxWidth: 320, display: 'block', margin: '0 auto' }} role="img" aria-label={`The day as a 24-hour ring, ${fmtDuration(total)} logged`}>
       <defs>
         <pattern id="dial-sleep" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--track)" /><rect width="3" height="6" fill="var(--sleep)" /></pattern>
-        <pattern id="dial-drift" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#B8B2C2" /><rect width="2.5" height="6" fill="#D6D2DD" /></pattern>
+        <pattern id="dial-drift" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#B7A3C2" /><rect width="2.5" height="6" fill="#DDD2E3" /></pattern>
       </defs>
       <circle cx={C} cy={C} r={(RO + RI) / 2} fill="none" stroke="var(--track)" strokeWidth={RO - RI} />
       {wake && wake.min > 0 && <path d={sector(0, Math.min(wake.min, 1439))} fill="url(#dial-sleep)" />}

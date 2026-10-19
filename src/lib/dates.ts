@@ -93,8 +93,9 @@ export function fmtHM(minutes: number): string {
   return `${h12}:${pad(m % 60)} ${period}`;
 }
 
-export function hourLabel(h: number): string {
-  if (h === 0 || h === 24) return '12 am';
+export function hourLabel(hour: number): string {
+  const h = hour % 24;
+  if (h === 0) return '12 am';
   if (h === 12) return '12 pm';
   return h < 12 ? `${h} am` : `${h - 12} pm`;
 }

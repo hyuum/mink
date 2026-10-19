@@ -191,7 +191,6 @@ h1, h2, h3, p { margin: 0; }
 .tblock strong { font-size: 13px; display: block; }
 .tblock.planned { background: transparent; border: 1.5px dashed; }
 .tblock.live { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.35) 0 5px, transparent 5px 10px); }
-.tblock.drift { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 7px); }
 .tblock.tiny { padding: 0 8px; display: flex; align-items: center; border-radius: 6px; }
 .tblock.tiny strong { font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
@@ -245,7 +244,8 @@ h1, h2, h3, p { margin: 0; }
 /* Home day ribbon */
 .ribbon { position: relative; height: 22px; margin-top: 12px; border-radius: 8px; background: var(--track); overflow: hidden; }
 .ribbon span { position: absolute; top: 0; bottom: 0; }
-.ribbon span.drift { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 3px, transparent 3px 7px); }
+/* Drift is time that slipped away: drawn as a thin line in its colour instead of a block. */
+.ribbon span.drift { top: calc(50% - 1.5px); bottom: calc(50% - 1.5px); border-radius: 2px; }
 .ribbon i { position: absolute; top: -2px; bottom: -2px; width: 2px; background: var(--accent); }
 
 /* Need / want and tags */
@@ -328,7 +328,7 @@ h1, h2, h3, p { margin: 0; }
 .spread-col { position: absolute; top: 0; bottom: 0; }
 .spread-col .sleep-band { left: 1.5px; right: 1.5px; border-radius: 4px; }
 .spread-blk { position: absolute; left: 1.5px; right: 1.5px; border-radius: 3px; }
-.spread-blk.drift { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.5) 0 2px, transparent 2px 5px); }
+.spread-blk.drift { right: auto; width: 2.5px; border-radius: 1px; }
 .spread-blk.planned { background: transparent !important; border: 1.5px dashed; }
 .spread-ms { position: absolute; left: -1px; width: 5px; height: 5px; transform: rotate(45deg); background: var(--muted); opacity: .7; }
 .spread-now { position: absolute; left: -2px; right: -2px; border-top: 2px solid var(--accent); }
@@ -340,7 +340,6 @@ h1, h2, h3, p { margin: 0; }
 .sleep-dot.bed { background: var(--bed); }
 .sleep-dot.inline { position: static; display: inline-block; margin-right: 5px; vertical-align: -1px; }
 .dot.sleep-swatch { background: repeating-linear-gradient(135deg, var(--sleep) 0 2px, var(--card) 2px 4px); outline: 1px solid var(--line); }
-.dot.drift { background-image: repeating-linear-gradient(135deg, rgba(255,255,255,.6) 0 1.5px, transparent 1.5px 3px) !important; }
 
 /* Day timeline: one column. Logged blocks are solid, planned ones dashed. Blocks that touch join square. */
 .day-head { align-items: flex-end; flex-wrap: wrap; row-gap: 4px; }
@@ -358,6 +357,19 @@ h1, h2, h3, p { margin: 0; }
 .tl-col .tblock.tiny .lbl strong { font-size: 11px; }
 .tblock.entry { background: color-mix(in srgb, var(--c) 55%, var(--card)); }
 .tblock.entry.jt { box-shadow: inset 0 1px 0 color-mix(in srgb, var(--card) 60%, transparent); }
+.tblock.entry.drift { background: none; border-left: 3px solid color-mix(in srgb, var(--c) 75%, var(--ink)); border-radius: 0 !important; }
+.tblock.entry.drift.jt { box-shadow: none; }
+.tblock.entry.drift.sel { box-shadow: 0 0 0 2px var(--ink); }
+.tblock.entry.drift .lbl strong { font-weight: 400; font-style: italic; color: var(--muted); }
+.midnight { position: absolute; left: 58px; right: 10px; height: 0; border-top: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent); z-index: 2; pointer-events: none; }
+.midnight span { position: absolute; right: 0; top: -9px; padding: 1px 6px; border-radius: 8px; background: var(--card); color: var(--ink); font-size: 10.5px; font-weight: 700; }
+.sleep-marker.carried::after { opacity: .45; }
+.sleep-marker.carried .sm-tab { border-style: dashed; color: var(--muted); font-weight: 400; box-shadow: none; cursor: pointer; }
+.name-sugs { display: flex; flex-wrap: wrap; gap: 6px; }
+.name-sug { border: 1.5px dashed var(--line); background: none; color: var(--ink); border-radius: 16px; min-height: 34px; padding: 0 12px; font-size: 13px; }
+.name-sug span { color: var(--muted); }
+.act-chip.hit { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.act-chip.dim { opacity: .4; }
 .tblock.plan { background: color-mix(in srgb, var(--c) 24%, var(--card)); border: 2px dashed color-mix(in srgb, var(--c) 72%, var(--ink)); }
 .tblock.plan.jt { border-top: none; }
 .tblock.ghost .lbl strong { font-weight: 400; }

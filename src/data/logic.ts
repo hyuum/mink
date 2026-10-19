@@ -72,7 +72,7 @@ export function entriesForDay(entries: TimeEntry[], day: Day, now: number): Time
  * A running timer that overlaps keeps running after the painted range.
  * Neighbouring painted blocks of the same activity (and no label) are merged into one.
  */
-export function paintRange(entries: TimeEntry[], from: number, to: number, categoryId: ID | null, now: number, makeId: () => ID): TimeEntry[] {
+export function paintRange(entries: TimeEntry[], from: number, to: number, categoryId: ID | null, now: number, makeId: () => ID, label = ''): TimeEntry[] {
   if (to <= from) return entries;
   const out: TimeEntry[] = [];
   for (const e of entries) {
@@ -81,7 +81,7 @@ export function paintRange(entries: TimeEntry[], from: number, to: number, categ
     if (e.start < from) out.push({ ...e, end: from });
     if (end > to) out.push({ ...e, id: e.start < from ? makeId() : e.id, start: to, end: e.end });
   }
-  if (categoryId) out.push({ id: makeId(), label: '', categoryId, start: from, end: to, source: 'paint' });
+  if (categoryId) out.push({ id: makeId(), label, categoryId, start: from, end: to, source: 'paint' });
   return mergeNeighbours(out.filter((e) => e.end === null || e.end - e.start >= MIN_MS));
 }
 
@@ -145,7 +145,7 @@ export function ownPlan(d: AppData, day: Day, makeId: () => ID): { data: AppData
 }
 
 /** Clears [from, to) minutes in one day's plan, trimming or splitting blocks, then adds a block if given an activity. */
-export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: number, categoryId: ID | null, makeId: () => ID): { blocks: PlannedBlock[]; id: ID | null } {
+export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: number, categoryId: ID | null, makeId: () => ID, label = ''): { blocks: PlannedBlock[]; id: ID | null } {
   if (to <= from) return { blocks, id: null };
   const out: PlannedBlock[] = [];
   for (const p of blocks) {
@@ -154,7 +154,7 @@ export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: nu
     if (p.endMin > to) out.push({ ...p, id: p.startMin < from ? makeId() : p.id, startMin: to });
   }
   const id = categoryId ? makeId() : null;
-  if (categoryId && id) out.push({ id, label: '', categoryId, day, startMin: from, endMin: to });
+  if (categoryId && id) out.push({ id, label, categoryId, day, startMin: from, endMin: to });
   return { blocks: out, id };
 }
 

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { addDays, fmtClock, fmtDuration, fmtHM, msAt, weekStart } from '../src/lib/dates.ts';
+import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
 import { avgMin, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, stickersThisWeek, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
@@ -307,4 +307,14 @@ test('migrate swaps the emoji older saves used for icon names', () => {
   assert.equal(d.trackers[0].icon, 'bed-double');
   assert.ok(!('emoji' in d.trackers[0]));
   assert.equal(migrate(d).trackers[0].icon, 'bed-double');
+});
+
+test('a painted block can carry a name, and named blocks stay separate', () => {
+  let n = 0;
+  const id = () => `n${++n}`;
+  const at = (h: number, m = 0) => msAt('2026-10-12', h * 60 + m);
+  let e = paintRange([], at(9), at(10), 'health', at(12), id, 'Gym');
+  e = paintRange(e, at(10), at(11), 'health', at(12), id);
+  assert.deepEqual(e.map((x) => [x.label, x.start, x.end]), [['Gym', at(9), at(10)], ['', at(10), at(11)]]);
+  assert.equal(hourLabel(26), '2 am');
 });

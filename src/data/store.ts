@@ -185,9 +185,9 @@ export const actions = {
     update((d) => ({ ...d, entries: [...d.entries, { source: 'manual', ...e, id: uid() }] }));
   },
   /** Paint a range of the timeline with an activity, or erase it (null). Returns the earlier snapshot for Undo. */
-  paint(from: number, to: number, categoryId: ID | null, now = Date.now()): AppData {
+  paint(from: number, to: number, categoryId: ID | null, now = Date.now(), label = ''): AppData {
     const before = state;
-    update((d) => ({ ...d, entries: paintRange(d.entries, from, to, categoryId, now, uid) }));
+    update((d) => ({ ...d, entries: paintRange(d.entries, from, to, categoryId, now, uid, label) }));
     return before;
   },
   updateEntry(id: ID, patch: Partial<TimeEntry>) {
@@ -232,12 +232,12 @@ export const actions = {
     actions.startTimer(p.label, p.categoryId, now, real);
   },
   /** Plan [from, to) minutes of a day with an activity, or clear it (null). Returns the earlier snapshot and the new block's id. */
-  planPaint(day: string, from: number, to: number, categoryId: ID | null): { before: AppData; id: ID | null } {
+  planPaint(day: string, from: number, to: number, categoryId: ID | null, label = ''): { before: AppData; id: ID | null } {
     const before = state;
     let id: ID | null = null;
     update((d) => {
       const { data } = ownPlan(d, day, uid);
-      const r = planRange(data.planned, day, from, to, categoryId, uid);
+      const r = planRange(data.planned, day, from, to, categoryId, uid, label);
       id = r.id;
       return unlinkMissing({ ...data, planned: r.blocks });
     });

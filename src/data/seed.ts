@@ -17,13 +17,13 @@ export const DEFAULT_TIME_CATEGORIES: TimeCategory[] = [
   { id: 'chores', name: 'Chores', color: '#BFD6A9' },
   { id: 'rest', name: 'Rest', color: '#DCE8CF' },
   { id: 'personal', name: 'Me time', color: '#F6C3D1' },
-  { id: 'drift', name: 'Drift', color: '#CFC8CB' },
+  { id: 'drift', name: 'Drift', color: '#B7A3C2' },
 ];
 
 /** Colours earlier versions used by default, so saves that never changed them move to the current palette. */
 export const OLD_DEFAULT_COLORS: Record<string, string[]> = {
   uni: ['#9CC488'], work: ['#6E9A5E'], friends: ['#EE9BB2'], transport: ['#93B9D6', '#A9B8A3', '#6FAFC0'], meals: ['#F2C38B'],
-  health: ['#F2A68E'], chores: ['#D4C49A'], rest: ['#C9B3E6'], personal: ['#D9A3C6'], drift: ['#B8B2C2'],
+  health: ['#F2A68E'], chores: ['#D4C49A'], rest: ['#C9B3E6'], personal: ['#D9A3C6'], drift: ['#B8B2C2', '#CFC8CB'],
 };
 
 /** Colours you can pick for an activity, and hand out in turn to new ones. */

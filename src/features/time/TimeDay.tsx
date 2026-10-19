@@ -1,7 +1,7 @@
 // The day timeline. Drag down the day to select some time, then pick what it was. Blocks are solid:
 // drag one to move it, tap it for handles to resize. Planned blocks still ahead show dashed; hold one
 // to fill it in. "Edit plan" switches the timeline to the plan on its own, with templates.
-import { useEffect, useRef, useState, type PointerEvent as RPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, useData } from '../../data/store';
 import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import { DRIFT_ID } from '../../data/seed';
@@ -39,10 +39,16 @@ interface Block {
   ghost: boolean;
 }
 type Gesture =
-  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; moved: boolean }
-  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; moved: boolean }
-  | { type: 'swipe'; x0: number; y0: number; cy: number; moved: boolean };
-interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
+  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; t0: number; moved: boolean }
+  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; t0: number; moved: boolean }
+  | { type: 'swipe'; x0: number; y0: number; cy: number; t0: number; moved: boolean };
+/** `naming` adds the "What was it?" box, whose text becomes the block's name. */
+interface Pick { title: string; sub: string; clear: boolean; naming?: boolean; apply: (categoryId: ID | null, label?: string) => void }
+interface PastName { label: string; categoryId: ID }
+
+/** A tap only counts if the finger lifts this soon, and not while the page is still gliding from a scroll. */
+const TAP_MS = 400;
+const GLIDE_MS = 200;
 
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
@@ -50,6 +56,20 @@ const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; 
 /** Activities picked recently come first in the picker. */
 let recent: ID[] = [];
 const noteRecent = (id: ID) => { recent = [id, ...recent.filter((r) => r !== id)].slice(0, 3); };
+
+/** Words that point at one of the starting activities, so typing "gym" suggests Exercise before you've used it. */
+const HINTS: Record<string, string[]> = {
+  uni: ['lecture', 'lab', 'study', 'tutorial', 'class', 'reading', 'assignment', 'exam', 'revision'],
+  work: ['shift', 'meeting', 'job'],
+  friends: ['hang', 'party', 'catch up', 'date'],
+  transport: ['bus', 'train', 'tram', 'drive', 'commute', 'uber', 'walk to'],
+  meals: ['lunch', 'dinner', 'breakfast', 'brunch', 'cook', 'eat', 'snack'],
+  health: ['gym', 'run', 'walk', 'yoga', 'swim', 'workout', 'pilates', 'climb'],
+  chores: ['laundry', 'clean', 'groceries', 'dishes', 'tidy', 'vacuum', 'shop'],
+  rest: ['nap', 'rest', 'lie down'],
+  personal: ['read', 'bath', 'journal', 'draw', 'paint', 'game', 'music'],
+  drift: ['scroll', 'tiktok', 'youtube', 'instagram', 'reddit', 'phone'],
+};
 
 export function TimeDay() {
   const data = useData();
@@ -116,6 +136,21 @@ export function TimeDay() {
   const gesture = useRef<Gesture | null>(null);
   const hold = useRef<{ block: Block; t0: number; x: number; y: number; raf: number; water: HTMLElement | null } | null>(null);
   const cat = (id: ID): TimeCategory | undefined => data.timeCategories.find((c) => c.id === id);
+  // Names you've given blocks before, newest first, for the picker to suggest.
+  const pastNames = useMemo(() => {
+    const seen = new Set<string>();
+    const out: PastName[] = [];
+    const named = [...data.entries.map((e) => ({ label: e.label, categoryId: e.categoryId, at: e.start })), ...data.planned.map((p) => ({ label: p.label, categoryId: p.categoryId, at: dayStartMs(p.day) }))]
+      .filter((n) => n.label.trim())
+      .sort((a, b) => b.at - a.at);
+    for (const n of named) {
+      const k = n.label.trim().toLowerCase();
+      if (seen.has(k) || !data.timeCategories.some((c) => c.id === n.categoryId)) continue;
+      seen.add(k);
+      out.push({ label: n.label.trim(), categoryId: n.categoryId });
+    }
+    return out;
+  }, [data.entries, data.planned, data.timeCategories]);
   const s = data.settings;
 
   useEffect(() => { setSel(null); setPick(null); setRange(null); setPlanMenu(false); }, [day, planMode]);
@@ -144,13 +179,26 @@ export function TimeDay() {
   const ahead = (endMin: number) => day > today || (nowMin !== null && endMin > nowMin);
   const shownPlans = planMode ? plan : plan.filter((p) => !done.has(p.id) && (peek || ahead(p.endMin)));
 
+  const wake = wakeOf(data.milestones, day);
+  const bed = bedOf(data.milestones, day);
+  const wakeMin = sleepDrag?.kind === 'wake' ? sleepDrag.min : wake?.min;
+  const bedMin = sleepDrag?.kind === 'bed' ? sleepDrag.min : bed?.min;
+  // Bed after midnight stretches the day past midnight (up to 6 am), so the late hours can be logged here too.
+  const nextDay = addDays(day, 1);
+  const maxH = !planMode && bedMin !== undefined && bedMin > 24 * 60 ? Math.min(30, Math.ceil(bedMin / 60) + 1) : 24;
+  // ...and the next day opens with that night: the bedtime shows faded at the top, with the sleep after it.
+  const prevDay = addDays(day, -1);
+  const prevBed = bedOf(data.milestones, prevDay);
+  const carried = !planMode && prevBed && prevBed.min > 24 * 60 ? prevBed.min - 24 * 60 : undefined;
+
   const toMin = (ms: number) => (ms - dayStart) / 60_000;
-  const logged: Block[] = planMode ? [] : entries.map((e) => {
+  const late = maxH > 24 ? entriesForDay(data.entries, nextDay, now).filter((e) => !entries.includes(e) && toMin(e.start) < maxH * 60) : [];
+  const logged: Block[] = planMode ? [] : [...entries, ...late].map((e) => {
     const end = entryEnd(e, now);
     return {
       kind: 'entry', id: e.id, categoryId: e.categoryId, label: e.label,
-      startMin: Math.max(0, toMin(e.start)), endMin: Math.min(24 * 60, Math.max(toMin(end), toMin(e.start) + 1)),
-      fixed: e.end === null || e.start < dayStart || end > dayStart + 24 * 3_600_000, live: e.end === null, ghost: false,
+      startMin: Math.max(0, toMin(e.start)), endMin: Math.min(maxH * 60, Math.max(toMin(end), toMin(e.start) + 1)),
+      fixed: e.end === null || e.start < dayStart || end > dayStart + maxH * 3_600_000, live: e.end === null, ghost: false,
     };
   });
   const loggedSorted = [...logged].sort((a, b) => a.startMin - b.startMin);
@@ -164,16 +212,13 @@ export function TimeDay() {
   const plansV = plans.map(withMove);
   const all = [...plansV, ...loggedV];
 
-  const wake = wakeOf(data.milestones, day);
-  const bed = bedOf(data.milestones, day);
-  const wakeMin = sleepDrag?.kind === 'wake' ? sleepDrag.min : wake?.min;
-  const bedMin = sleepDrag?.kind === 'bed' ? sleepDrag.min : bed?.min;
   // The day runs from waking up to bedtime, with an hour of room either side to drag them further.
   let h0 = wakeMin !== undefined ? Math.floor(wakeMin / 60) - 1 : s.dayStartHour;
-  let h1 = bedMin !== undefined ? Math.ceil(Math.min(bedMin, 24 * 60) / 60) + 1 : s.dayEndHour;
+  if (carried !== undefined) h0 = Math.min(h0, Math.floor(carried / 60));
+  let h1 = bedMin !== undefined ? Math.ceil(bedMin / 60) + 1 : s.dayEndHour;
   for (const b of all) { h0 = Math.min(h0, Math.floor(b.startMin / 60)); h1 = Math.max(h1, Math.ceil(b.endMin / 60)); }
   if (nowMin !== null) { h0 = Math.min(h0, Math.floor(nowMin / 60)); h1 = Math.max(h1, Math.ceil(nowMin / 60)); }
-  h0 = Math.max(0, h0); h1 = Math.min(24, Math.max(h1, h0 + 1));
+  h0 = Math.max(0, h0); h1 = Math.min(maxH, Math.max(h1, h0 + 1));
   const top = (min: number) => TOP_PAD + ((min - h0 * 60) / 60) * HOUR_PX;
   const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
   const hours = Array.from({ length: h1 - h0 + 1 }, (_, i) => h0 + i);
@@ -212,19 +257,21 @@ export function TimeDay() {
     setRange({ from, to });
     setPick({
       title: `${kind === 'plan' ? 'Plan' : 'Log'} ${fmtHM(from)} – ${fmtHM(to)}`,
-      sub: `${fmtDuration(to - from)} · what ${kind === 'plan' ? 'will it be' : 'was it'}?`,
+      sub: fmtDuration(to - from),
       clear: overlaps,
-      apply: (categoryId) => {
+      naming: true,
+      apply: (categoryId, label = '') => {
+        const what = label || cat(categoryId ?? '')?.name;
         if (kind === 'plan') {
-          const { before, id } = actions.planPaint(day, from, to, categoryId);
+          const { before, id } = actions.planPaint(day, from, to, categoryId, label);
           setSel(id ? { kind: 'plan', id } : null);
-          showToast(categoryId ? `Planned ${cat(categoryId)?.name} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)} of the plan`, before);
+          showToast(categoryId ? `Planned ${what} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)} of the plan`, before);
         } else {
           const a = msAt(day, from), b = msAt(day, to);
-          const before = actions.paint(a, b, categoryId, Date.now());
+          const before = actions.paint(a, b, categoryId, Date.now(), label);
           const made = categoryId ? getData().entries.find((e) => e.categoryId === categoryId && e.start <= a && e.end !== null && e.end >= b) : undefined;
           setSel(made ? { kind: 'entry', id: made.id } : null);
-          showToast(categoryId ? `Logged ${cat(categoryId)?.name} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)}`, before);
+          showToast(categoryId ? `Logged ${what} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)}`, before);
         }
         if (categoryId) noteRecent(categoryId);
       },
@@ -242,7 +289,7 @@ export function TimeDay() {
       const dx = clientX - g.x0;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
       if (Math.abs(dx) > Math.abs(dy)) {
-        gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, moved: true };
+        gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, t0: g.t0, moved: true };
         beginSwipe(g.x0, g.y0, 1);
         swipe.current!.on = true;
         clearTimeout(stripTimer.current);
@@ -326,8 +373,17 @@ export function TimeDay() {
     });
   };
 
+  // A finger that lands while the page is still gliding is stopping the scroll, not touching the day.
+  const lastScroll = useRef(0);
+  useEffect(() => {
+    const onScroll = () => { lastScroll.current = performance.now(); };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, []);
+
   const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.button > 0 || gesture.current || hold.current) return;
+    if (performance.now() - lastScroll.current < GLIDE_MS) { e.preventDefault(); return; }
     const t = e.target as HTMLElement;
     const ph = t.closest<HTMLElement>('[data-phone]');
     if (ph) { setReview({ focus: ph.dataset.phone! }); return; }
@@ -345,10 +401,10 @@ export function TimeDay() {
     if (block) {
       const handle = t.closest<HTMLElement>('[data-handle]')?.dataset.handle;
       const type = block.fixed ? 'fixed' : handle === 'top' ? 'resize-top' : handle === 'bot' ? 'resize-bot' : 'press';
-      gesture.current = { type, block, ...boundsOf(block), x0: e.clientX, y0: e.clientY, cy: e.clientY, moved: false };
+      gesture.current = { type, block, ...boundsOf(block), x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false };
     } else {
       const a = slotAt(e.clientY);
-      gesture.current = { type: 'range', a, b: a, x0: e.clientX, y0: e.clientY, cy: e.clientY, moved: false };
+      gesture.current = { type: 'range', a, b: a, x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false };
     }
     autoScroll();
   };
@@ -369,8 +425,9 @@ export function TimeDay() {
       openPick(Math.min(g.a, g.b), Math.max(g.a, g.b) + SLOT);
       return;
     }
-    if (g.type === 'fixed') { if (!g.moved) setEdit({ kind: 'entry', id: g.block.id }); return; }
-    if (g.type === 'press') { setSel(sel?.id === g.block.id ? null : { kind: g.block.kind, id: g.block.id }); return; }
+    const tap = performance.now() - g.t0 < TAP_MS;
+    if (g.type === 'fixed') { if (!g.moved && tap) setEdit({ kind: 'entry', id: g.block.id }); return; }
+    if (g.type === 'press') { if (tap) setSel(sel?.id === g.block.id ? null : { kind: g.block.kind, id: g.block.id }); return; }
     const m = moving;
     setMoving(null);
     if (!m || (m.startMin === g.block.startMin && m.endMin === g.block.endMin)) return;
@@ -393,6 +450,8 @@ export function TimeDay() {
 
   /* ---------- Wake-up and bedtime tags ---------- */
   const sleepGesture = useRef<{ kind: 'wake' | 'bed'; y0: number; at: number; moved: boolean } | null>(null);
+  /** Bedtime can be as late as 6 am the next morning. */
+  const sleepMax = (kind: 'wake' | 'bed') => (kind === 'bed' ? 30 * 60 : 24 * 60);
   const saveSleep = (kind: 'wake' | 'bed', min: number) => {
     const before = getData();
     actions.addMilestone({ kind, label: '', day, min });
@@ -409,7 +468,7 @@ export function TimeDay() {
     const dy = e.clientY - g.y0;
     if (Math.abs(dy) > 4) g.moved = true;
     if (!g.moved) return;
-    const min = Math.max(0, Math.min(24 * 60, Math.round((Math.min(g.at, 24 * 60) + (dy / HOUR_PX) * 60) / 5) * 5));
+    const min = Math.max(0, Math.min(sleepMax(g.kind), Math.round((g.at + (dy / HOUR_PX) * 60) / 5) * 5));
     setSleepDrag({ kind: g.kind, min });
   };
   const endSleepDrag = (kind: 'wake' | 'bed', current: number | undefined, at: number) => {
@@ -424,8 +483,9 @@ export function TimeDay() {
 
   /* ---------- Rendering ---------- */
   const joins = (b: Block, list: Block[]) => {
-    if (isArrow(b)) return { jt: false, jb: false };
-    const solid = list.filter((o) => o.id !== b.id && !isArrow(o));
+    const solidOf = (o: Block) => !isArrow(o) && !(o.kind === 'entry' && o.categoryId === DRIFT_ID);
+    if (!solidOf(b)) return { jt: false, jb: false };
+    const solid = list.filter((o) => o.id !== b.id && solidOf(o));
     return { jt: solid.some((o) => Math.abs(o.endMin - b.startMin) < 0.5), jb: solid.some((o) => Math.abs(o.startMin - b.endMin) < 0.5) };
   };
 
@@ -588,7 +648,8 @@ export function TimeDay() {
                 {hr % 2 === 0 && <span className="hour-label">{hourLabel(hr)}</span>}
               </div>
             ))}
-            {!planMode && wakeMin !== undefined && wakeMin > h0 * 60 && <div className="sleep-band" style={{ top: top(h0 * 60), height: clampTop(wakeMin) - top(h0 * 60) }} aria-hidden="true" />}
+            {!planMode && wakeMin !== undefined && wakeMin > (carried ?? h0 * 60) && <div className="sleep-band" style={{ top: clampTop(carried ?? h0 * 60), height: clampTop(wakeMin) - clampTop(carried ?? h0 * 60) }} aria-hidden="true" />}
+            {h1 > 24 && <div className="midnight" style={{ top: top(24 * 60) }} aria-hidden="true"><span>{weekdayShort(nextDay)} {dayNum(nextDay)}</span></div>}
             {!planMode && bedMin !== undefined && bedMin < h1 * 60 && <div className="sleep-band" style={{ top: clampTop(bedMin), height: top(h1 * 60) - clampTop(bedMin) }} aria-hidden="true" />}
             <div
               className="tl-col" ref={col} style={{ left: GUTTER }}
@@ -625,7 +686,8 @@ export function TimeDay() {
             </div>
             {!planMode && (['wake', 'bed'] as const).map((kind) => {
               const min = kind === 'wake' ? wakeMin : bedMin;
-              const at = min ?? (kind === 'wake' ? h0 * 60 : h1 * 60);
+              // An unset wake-up waits below last night's bedtime when that carried over.
+              const at = min ?? (kind === 'bed' ? h1 * 60 : carried !== undefined ? Math.max(carried + 60, s.dayStartHour * 60) : h0 * 60);
               return (
                 <div key={kind} className={`sleep-marker ${kind} ${min === undefined ? 'unset' : ''} ${sleepDrag?.kind === kind ? 'dragging' : ''}`} style={{ top: clampTop(at) }}>
                   <button
@@ -634,7 +696,7 @@ export function TimeDay() {
                     onPointerDown={(e) => startSleepDrag(e, kind, at)} onPointerMove={moveSleepDrag} onPointerUp={() => endSleepDrag(kind, min, at)} onPointerCancel={() => { sleepGesture.current = null; setSleepDrag(null); }}
                     onKeyDown={(e) => {
                       const step = e.key === 'ArrowUp' ? -5 : e.key === 'ArrowDown' ? 5 : 0;
-                      if (step) { e.preventDefault(); saveSleep(kind, Math.max(0, Math.min(24 * 60, at + step))); }
+                      if (step) { e.preventDefault(); saveSleep(kind, Math.max(0, Math.min(sleepMax(kind), at + step))); }
                     }}
                   >
                     {kind === 'wake' ? <IconSun size={12} /> : <IconMoon size={12} />}
@@ -643,6 +705,13 @@ export function TimeDay() {
                 </div>
               );
             })}
+            {carried !== undefined && prevBed && (
+              <div className="sleep-marker carried" style={{ top: clampTop(carried) }}>
+                <button type="button" className="sm-tab" aria-label={`Went to bed at ${fmtMilestone(prevBed.min)} after ${weekdayLong(prevDay)}. Open ${weekdayLong(prevDay)} to change it.`} onClick={() => setDay(prevDay)}>
+                  <IconMoon size={12} />{fmtMilestone(prevBed.min).replace(/ (am|pm)$/, '')} · {weekdayShort(prevDay)}
+                </button>
+              </div>
+            )}
             {nowMin !== null && nowMin > h0 * 60 && !planMode && <div className="past-shade" style={{ top: 0, height: clampTop(nowMin) }} aria-hidden="true" />}
             {nowMin !== null && nowMin >= h0 * 60 && nowMin <= h1 * 60 && <div className="now-line" style={{ top: top(nowMin) }} aria-label={`Now, ${fmtHM(nowMin)}`} />}
           </div>
@@ -711,33 +780,66 @@ export function TimeDay() {
         </div>
       )}
       <PhoneReview open={review !== null} suggestions={phone} focus={review?.focus} cats={data.timeCategories} onClose={() => setReview(null)} />
-      <ActivityPicker pick={pick} cats={data.timeCategories} onClose={() => { setPick(null); setRange(null); }} />
+      <ActivityPicker pick={pick} cats={data.timeCategories} names={pastNames} onClose={() => { setPick(null); setRange(null); }} />
       <EntryEditor target={edit} onClose={() => setEdit(null)} />
     </>
   );
 }
 
-function ActivityPicker({ pick, cats, onClose }: { pick: Pick | null; cats: TimeCategory[]; onClose: () => void }) {
-  const ordered = [...recent.map((id) => cats.find((c) => c.id === id)).filter((c): c is TimeCategory => Boolean(c)), ...cats.filter((c) => !recent.includes(c.id))];
+function ActivityPicker({ pick, cats, names, onClose }: { pick: Pick | null; cats: TimeCategory[]; names: PastName[]; onClose: () => void }) {
   return (
     <Sheet open={pick !== null} onClose={onClose} label={pick?.title ?? 'Pick an activity'}>
-      {pick && (
-        <div className="stack" style={{ gap: 14 }}>
-          <div>
-            <h2>{pick.title}</h2>
-            <p className="small muted">{pick.sub}</p>
-          </div>
-          <div className="act-grid">
-            {ordered.map((c) => (
-              <button key={c.id} type="button" className={`act-chip ${recent.includes(c.id) ? 'recent' : ''}`} onClick={() => { pick.apply(c.id); onClose(); }}>
-                <span className="swatch" style={{ background: c.color }} />{c.name}
-              </button>
-            ))}
-            {pick.clear && <button type="button" className="act-chip clear" onClick={() => { pick.apply(null); onClose(); }}>Clear this time</button>}
-          </div>
-          <button type="button" className="btn ghost block" onClick={onClose}>Cancel</button>
-        </div>
-      )}
+      {pick && <PickerBody key={pick.title} pick={pick} cats={cats} names={names} onClose={onClose} />}
     </Sheet>
+  );
+}
+
+function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCategory[]; names: PastName[]; onClose: () => void }) {
+  const [text, setText] = useState('');
+  const ordered = [...recent.map((id) => cats.find((c) => c.id === id)).filter((c): c is TimeCategory => Boolean(c)), ...cats.filter((c) => !recent.includes(c.id))];
+  const q = text.trim().toLowerCase();
+  // What you've typed suggests names you've used before, and the activity it most likely is.
+  const matches = q
+    ? names.filter((n) => n.label.toLowerCase().includes(q)).sort((a, b) => Number(!a.label.toLowerCase().startsWith(q)) - Number(!b.label.toLowerCase().startsWith(q)))
+    : names;
+  const guess = q.length < 2 ? undefined
+    : names.find((n) => n.label.toLowerCase().startsWith(q))?.categoryId
+      ?? cats.find((c) => c.name.toLowerCase().startsWith(q))?.id
+      ?? Object.keys(HINTS).find((id) => cats.some((c) => c.id === id) && HINTS[id].some((w) => q.startsWith(w) || (q.length >= 3 && w.startsWith(q))));
+  // Typing a name you've used before keeps how you wrote it then.
+  const typed = names.find((n) => n.label.toLowerCase() === q)?.label ?? text.trim();
+  const choose = (categoryId: ID | null, label = typed) => { pick.apply(categoryId, label); onClose(); };
+  const submit = (e: FormEvent) => { e.preventDefault(); if (guess) choose(guess); };
+  return (
+    <div className="stack" style={{ gap: 14 }}>
+      <div>
+        <h2>{pick.title}</h2>
+        <p className="small muted">{pick.sub}</p>
+      </div>
+      {pick.naming && (
+        <form className="stack" style={{ gap: 8 }} onSubmit={submit}>
+          <input className="field-input" id="pick-name" aria-label="What was it? (optional)" placeholder="What was it? (optional)" autoComplete="off" enterKeyHint="done"
+            value={text} onChange={(e) => setText(e.target.value)} />
+          {matches.length > 0 && (
+            <div className="name-sugs">
+              {matches.slice(0, 3).map((n) => (
+                <button key={n.label} type="button" className="name-sug" onClick={() => choose(n.categoryId, n.label)}>
+                  {n.label} <span>· {cats.find((c) => c.id === n.categoryId)?.name}</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </form>
+      )}
+      <div className="act-grid">
+        {ordered.map((c) => (
+          <button key={c.id} type="button" className={`act-chip ${recent.includes(c.id) ? 'recent' : ''} ${guess === c.id ? 'hit' : guess ? 'dim' : ''}`} onClick={() => choose(c.id)}>
+            <span className="swatch" style={{ background: c.color }} />{c.name}
+          </button>
+        ))}
+        {pick.clear && <button type="button" className="act-chip clear" onClick={() => choose(null, '')}>Clear this time</button>}
+      </div>
+      <button type="button" className="btn ghost block" onClick={onClose}>Cancel</button>
+    </div>
   );
 }
