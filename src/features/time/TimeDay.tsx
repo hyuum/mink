@@ -39,8 +39,9 @@ interface Block {
   ghost: boolean;
 }
 type Gesture =
-  | { type: 'range'; a: number; b: number; y0: number; cy: number; moved: boolean }
-  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; y0: number; cy: number; moved: boolean };
+  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; moved: boolean }
+  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; moved: boolean }
+  | { type: 'swipe'; x0: number; y0: number; cy: number; moved: boolean };
 interface Pick { title: string; sub: string; clear: boolean; apply: (categoryId: ID | null) => void }
 
 const TIP_KEY = 'matcha.dayTip';
@@ -63,7 +64,30 @@ export function TimeDay() {
   // The week strip stays tucked away: it shows while planning, after a swipe to another day, or when you tap the date.
   const [strip, setStrip] = useState(false);
   const stripTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const swipe = useRef<{ x: number; y: number } | null>(null);
+  // A sideways swipe: on the date or the day it moves a day, on the week strip a week. The strip follows the finger.
+  const swipe = useRef<{ x: number; y: number; unit: 1 | 7; on: boolean } | null>(null);
+  const [swipeDx, setSwipeDx] = useState<{ dx: number; unit: 1 | 7 } | null>(null);
+  const daysRow = useRef<HTMLDivElement>(null);
+  const beginSwipe = (x: number, y: number, unit: 1 | 7) => { swipe.current = { x, y, unit, on: false }; };
+  const moveSwipe = (x: number, y: number) => {
+    const s = swipe.current;
+    if (!s) return false;
+    const dx = x - s.x, dy = y - s.y;
+    if (!s.on && Math.abs(dx) > 10 && Math.abs(dx) > 1.5 * Math.abs(dy)) { s.on = true; clearTimeout(stripTimer.current); setStrip(true); }
+    if (s.on) setSwipeDx({ dx, unit: s.unit });
+    return s.on;
+  };
+  const endSwipe = (x: number) => {
+    const s = swipe.current;
+    swipe.current = null;
+    setSwipeDx(null);
+    if (!s?.on) return false;
+    const dx = x - s.x;
+    if (Math.abs(dx) > 50) setDay(addDays(day, (dx < 0 ? 1 : -1) * s.unit));
+    flashStrip(s.unit === 7 ? 4000 : 2500);
+    return true;
+  };
+  const cancelSwipe = () => { swipe.current = null; setSwipeDx(null); };
   const flashStrip = (ms = 2500) => {
     setStrip(true);
     clearTimeout(stripTimer.current);
@@ -97,6 +121,14 @@ export function TimeDay() {
   }, [sel !== null]);
 
   const stripOpen = planMode || strip;
+  // While swiping between days, a pill slides under the week strip towards the day you'll land on.
+  const week = weekDays(day);
+  const dayIx = week.indexOf(day);
+  const shift = swipeDx?.unit === 1 ? Math.max(-1, Math.min(1, -swipeDx.dx / 90)) : 0;
+  const shownDay = Math.abs(shift) > 0.5 ? addDays(day, shift > 0 ? 1 : -1) : day;
+  const colW = (daysRow.current?.clientWidth ?? 0) / 7;
+  const indicator = colW && dayIx >= 0 ? { width: colW - 4, transform: `translateX(${(dayIx + shift) * colW}px)`, transition: swipeDx ? 'none' : undefined } : null;
+  const weekShift = swipeDx?.unit === 7 ? { transform: `translateX(${swipeDx.dx * 0.5}px)`, opacity: 1 - Math.min(0.5, Math.abs(swipeDx.dx) / 300) } : undefined;
   const phone = usePhoneSuggestions(day, today);
   const dayStart = dayStartMs(day);
   const nowMin = day === today ? minutesOfDay(now) : null;
@@ -193,11 +225,20 @@ export function TimeDay() {
     });
   };
 
-  const onMove = (clientY: number) => {
+  const onMove = (clientX: number, clientY: number) => {
     const g = gesture.current;
     if (!g) return;
     g.cy = clientY;
     const dy = clientY - g.y0;
+    if (g.type === 'swipe') { moveSwipe(clientX, clientY); return; }
+    // Sideways before anything else: turn this into a swipe between days.
+    if (!g.moved && (g.type === 'range' || g.type === 'press') && Math.abs(clientX - g.x0) > 12 && Math.abs(clientX - g.x0) > 1.5 * Math.abs(dy)) {
+      gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, moved: true };
+      beginSwipe(g.x0, g.y0, 1);
+      moveSwipe(clientX, clientY);
+      setRange(null);
+      return;
+    }
     if (Math.abs(dy) > 6) g.moved = true;
     if (g.type === 'range') {
       if (!g.moved) return;
@@ -220,10 +261,10 @@ export function TimeDay() {
   const autoScroll = () => {
     const tick = () => {
       const g = gesture.current;
-      if (!g) return;
+      if (!g || g.type === 'swipe') return;
       const bottom = window.innerHeight - 150;
       const step = g.cy > bottom ? Math.min(14, (g.cy - bottom) / 4 + 3) : g.cy < 90 ? -Math.min(14, (90 - g.cy) / 4 + 3) : 0;
-      if (step) { window.scrollBy(0, step); onMove(g.cy); }
+      if (step) { window.scrollBy(0, step); onMove(g.x0, g.cy); }
       requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
@@ -292,24 +333,25 @@ export function TimeDay() {
     if (block) {
       const handle = t.closest<HTMLElement>('[data-handle]')?.dataset.handle;
       const type = block.fixed ? 'fixed' : handle === 'top' ? 'resize-top' : handle === 'bot' ? 'resize-bot' : 'press';
-      gesture.current = { type, block, ...boundsOf(block), y0: e.clientY, cy: e.clientY, moved: false };
+      gesture.current = { type, block, ...boundsOf(block), x0: e.clientX, y0: e.clientY, cy: e.clientY, moved: false };
     } else {
       const a = slotAt(e.clientY);
-      gesture.current = { type: 'range', a, b: a, y0: e.clientY, cy: e.clientY, moved: false };
+      gesture.current = { type: 'range', a, b: a, x0: e.clientX, y0: e.clientY, cy: e.clientY, moved: false };
     }
     autoScroll();
   };
   const onPointerMove = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
     if (h) { if (Math.hypot(e.clientX - h.x, e.clientY - h.y) > 10) cancelHold(false); return; }
-    onMove(e.clientY);
+    onMove(e.clientX, e.clientY);
   };
-  const onPointerUp = () => {
+  const onPointerUp = (e: RPointerEvent<HTMLDivElement>) => {
     const h = hold.current;
     if (h) { cancelHold(performance.now() - h.t0 < 250); return; }
     const g = gesture.current;
     gesture.current = null;
     if (!g) return;
+    if (g.type === 'swipe') { endSwipe(e.clientX); return; }
     if (g.type === 'range') {
       if (!g.moved) { setRange(null); if (sel) setSel(null); else showToast('Drag down the day to add some time'); return; }
       openPick(Math.min(g.a, g.b), Math.max(g.a, g.b) + SLOT);
@@ -331,6 +373,7 @@ export function TimeDay() {
   };
   const onPointerCancel = () => {
     cancelHold(false);
+    cancelSwipe();
     gesture.current = null;
     setMoving(null);
     if (!pick) setRange(null);
@@ -452,15 +495,10 @@ export function TimeDay() {
         </div>
         <div
           className="band-row day-head swipe-zone"
-          onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
-          onPointerUp={(e) => {
-            const st = swipe.current;
-            swipe.current = null;
-            if (!st) return;
-            const dx = e.clientX - st.x, dy = e.clientY - st.y;
-            if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) { setDay(addDays(day, dx < 0 ? 1 : -1)); flashStrip(); }
-          }}
-          onPointerCancel={() => { swipe.current = null; }}
+          onPointerDown={(e) => beginSwipe(e.clientX, e.clientY, 1)}
+          onPointerMove={(e) => moveSwipe(e.clientX, e.clientY)}
+          onPointerUp={(e) => endSwipe(e.clientX)}
+          onPointerCancel={cancelSwipe}
         >
           <div style={{ minWidth: 0 }}>
             <h1>
@@ -473,21 +511,17 @@ export function TimeDay() {
         </div>
         {stripOpen && <div
           className="row week-strip swipe-zone" style={{ gap: 2 }}
-          onPointerDown={(e) => { swipe.current = { x: e.clientX, y: e.clientY }; }}
-          onPointerUp={(e) => {
-            const st = swipe.current;
-            swipe.current = null;
-            if (!st) return;
-            const dx = e.clientX - st.x, dy = e.clientY - st.y;
-            if (Math.abs(dx) > 50 && Math.abs(dx) > 2 * Math.abs(dy)) { setDay(addDays(day, dx < 0 ? 7 : -7)); flashStrip(4000); }
-          }}
-          onPointerCancel={() => { swipe.current = null; }}
+          onPointerDown={(e) => beginSwipe(e.clientX, e.clientY, 7)}
+          onPointerMove={(e) => moveSwipe(e.clientX, e.clientY)}
+          onPointerUp={(e) => { if (endSwipe(e.clientX)) e.preventDefault(); }}
+          onPointerCancel={cancelSwipe}
         >
-          <div className="days grow">
+          <div className="days grow" ref={daysRow} style={weekShift}>
+            {indicator && <span className="day-ind" style={indicator} aria-hidden="true" />}
             {weekDays(day).map((d) => {
               const t = templateFor(data.templates, d);
               return (
-                <button key={d} className="day" aria-pressed={d === day} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
+                <button key={d} className="day" aria-pressed={d === shownDay} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
                   <small>{weekdayShort(d)}</small>
                   <b>{dayNum(d)}</b>
                   {planMode && <em>{t ? t.name.split(' ')[0] : ''}</em>}
@@ -535,7 +569,7 @@ export function TimeDay() {
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
           </div>
-          <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8 }}>
+          <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8, ...(swipeDx?.unit === 1 ? { transform: `translateX(${Math.max(-60, Math.min(60, swipeDx.dx * 0.3))}px)`, opacity: 1 - Math.min(0.35, Math.abs(swipeDx.dx) / 400) } : {}) }}>
             {hours.map((hr) => (
               <div key={hr} className={`hr ${hr % 2 ? 'odd' : ''}`} style={{ top: top(hr * 60) }}>
                 {hr % 2 === 0 && <span className="hour-label">{hourLabel(hr)}</span>}
