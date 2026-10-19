@@ -1,5 +1,5 @@
 // Settings and data tools. Kept deliberately plain; the More screen gets its proper design in a later round.
-import { useState, type ChangeEvent } from 'react';
+import { useEffect, useState, type ChangeEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
 import { moreView, showToast } from '../../app/ui-state';
 import { Band, Card, ChipGroup } from '../../ui/kit';
@@ -142,17 +142,65 @@ export function Settings() {
             )}
           </div>
         </Card>
+        <AndroidAppCard />
         <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p>
       </div>
     </>
   );
 }
 
+const APK_URL = 'https://github.com/hyuum/mink/releases/download/android-latest/matcha-planner.apk';
+const APK_RELEASE = 'https://api.github.com/repos/hyuum/mink/releases/tags/android-latest';
+
+/**
+ * Where to get the Android app. Inside the app it also checks whether GitHub has a newer build than this one.
+ * Links leave the app for the phone's browser, which downloads the file and offers to install it.
+ */
+function AndroidAppCard() {
+  const native = phoneAvailable();
+  const [latest, setLatest] = useState<number | null | 'error'>(null);
+  useEffect(() => {
+    if (!native) return;
+    let live = true;
+    fetch(APK_RELEASE, { headers: { Accept: 'application/vnd.github+json' } })
+      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
+      .then((rel: { assets?: { name: string; updated_at: string }[] }) => {
+        const apk = rel.assets?.find((a) => a.name.endsWith('.apk'));
+        if (live) setLatest(apk ? Date.parse(apk.updated_at) : 'error');
+      })
+      .catch(() => { if (live) setLatest('error'); });
+    return () => { live = false; };
+  }, [native]);
+  // The APK is uploaded a minute or two after its own build, so allow some slack before calling it newer.
+  const newer = typeof latest === 'number' && latest > __BUILT_AT__ + 10 * 60_000;
+  return (
+    <Card title="Android app" id="set-app">
+      <div className="stack" style={{ gap: 10 }}>
+        <p className="small muted">
+          {!native ? 'Install Matcha Planner on an Android phone. It adds phone tracking and works like any other app.'
+            : latest === null ? 'Checking for a newer version…'
+            : latest === 'error' ? "Couldn't check for a newer version. You can still download the latest one."
+            : newer ? `A newer version is ready (${fmtBuilt(latest)}). Download it and tap Update.`
+            : 'This is the latest version.'}
+        </p>
+        {(!native || newer || latest === 'error') && (
+          <a className={`btn ${newer ? 'green' : ''}`} href={APK_URL} target="_blank" rel="noopener">
+            {native ? 'Download the latest version' : 'Download for Android'}
+          </a>
+        )}
+      </div>
+    </Card>
+  );
+}
+
+const fmtBuilt = (ms: number) => {
+  const d = new Date(ms);
+  return `${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
+};
+
 /** Which build this is, e.g. "Android app · version 19 Oct, 1:28 pm". */
 function builtLabel() {
-  const d = new Date(__BUILT_AT__);
-  const when = `${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
-  return `${phoneAvailable() ? 'Android app' : 'Web app'} · version ${when}`;
+  return `${phoneAvailable() ? 'Android app' : 'Web app'} · version ${fmtBuilt(__BUILT_AT__)}`;
 }
 
 /** One activity: colour, name, drawn as an arrow or a block, and delete (moving its time somewhere else). */

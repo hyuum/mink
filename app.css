@@ -119,6 +119,7 @@ h1, h2, h3, p { margin: 0; }
 /* Controls */
 .icon-btn { width: 44px; height: 44px; border: none; background: transparent; display: inline-grid; place-items: center; border-radius: 12px; flex: none; color: inherit; }
 .btn { min-height: 44px; padding: 0 16px; border-radius: 22px; border: none; background: var(--soft); color: var(--ink); font-size: 14px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; }
+a.btn { text-decoration: none; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); }
 .btn.green { background: var(--done); color: var(--done-ink); }
 .btn.ghost { background: transparent; border: 1px solid var(--line); }
