@@ -67,12 +67,14 @@ jobs:
         run: |
           cp android/app/build/outputs/apk/release/app-release.apk matcha-planner.apk
           notes="Install file for Matcha Planner on Android. Built from ${GITHUB_SHA::7} (build ${{ github.run_number }}). Download matcha-planner.apk on your phone and open it."
+          # GitHub's release API sometimes answers 500; try each call a few times before giving up.
+          retry() { for i in 1 2 3 4; do "$@" && return 0; echo "Retrying in $((i * 5))s…"; sleep $((i * 5)); done; return 1; }
           if gh release view android-latest >/dev/null 2>&1; then
-            gh release edit android-latest --notes "$notes"
+            retry gh release edit android-latest --notes "$notes" || echo "::warning::Couldn't update the release notes; uploading anyway."
           else
-            gh release create android-latest --title "Matcha Planner for Android" --notes "$notes" --target "$GITHUB_SHA"
+            retry gh release create android-latest --title "Matcha Planner for Android" --notes "$notes" --target "$GITHUB_SHA"
           fi
-          gh release upload android-latest matcha-planner.apk --clobber
+          retry gh release upload android-latest matcha-planner.apk --clobber
 
       - uses: actions/upload-artifact@v4
         with:
