@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { IconCheck, IconClock, IconHome, IconMore, IconPlus, IconWallet } from './icons';
 import { actions } from '../data/store';
-import { go, openQuickAdd, toast, useRoute, type Route } from '../app/ui-state';
+import { go, moreView, openQuickAdd, toast, useRoute, type Route } from '../app/ui-state';
 import type { StickerKind } from '../data/logic';
 import type { SpendKind } from '../data/types';
 
@@ -10,9 +10,9 @@ export function Band({ children }: { children: ReactNode }) {
   return <header className="band">{children}</header>;
 }
 
-export function Card({ title, action, children, className = '' }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string }) {
+export function Card({ title, action, children, className = '', id }: { title?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; id?: string }) {
   return (
-    <section className={`card ${className}`}>
+    <section className={`card ${className}`} id={id}>
       {(title || action) && (
         <div className="card-head">
           {title ? <h2 className="card-title">{title}</h2> : <span />}
@@ -149,7 +149,7 @@ const NAV: { route: Route; label: string; icon: ReactNode; match: Route[] }[] = 
 export function BottomNav() {
   const route = useRoute();
   const link = (n: (typeof NAV)[number]) => (
-    <a key={n.route} href={`#${n.route}`} aria-current={n.match.includes(route) ? 'page' : undefined} onClick={(e) => { e.preventDefault(); go(n.route); }}>
+    <a key={n.route} href={`#${n.route}`} aria-current={n.match.includes(route) ? 'page' : undefined} onClick={(e) => { e.preventDefault(); if (n.route === 'more') moreView.set({ kind: 'hub' }); go(n.route); }}>
       {n.icon}
       {n.label}
     </a>

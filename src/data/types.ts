@@ -103,6 +103,52 @@ export interface Bill {
 export interface TaskList {
   id: ID;
   name: string;
+  emoji?: string;
+}
+
+/** A folder in More. Task folders are the task lists in `lists`; every other kind lives in `folders`. */
+export type FolderType = 'tracker' | 'check' | 'collect' | 'wish';
+
+export interface Folder {
+  id: ID;
+  name: string;
+  emoji: string;
+  type: FolderType;
+}
+
+export type RepeatUnit = 'day' | 'week' | 'month';
+
+/**
+ * Something in a tracker folder. "since" counts days since it last happened (habits to avoid);
+ * "every" repeats and shows when it's next due (chores, habits to keep up).
+ */
+export interface TrackerItem {
+  id: ID;
+  folderId: ID;
+  name: string;
+  emoji: string;
+  kind: 'since' | 'every';
+  every?: { n: number; unit: RepeatUnit };
+  /** For monthly repeats: due on this day of the month (1–31) instead of a month after last time. */
+  onDay?: number;
+  /** Days it happened or was done, oldest first. */
+  hits: Day[];
+  /** The day it was added, so a new repeat isn't due straight away. */
+  since: Day;
+  pinned?: boolean;
+}
+
+/** Something in a checklist, collection or wishlist folder. */
+export interface ListItem {
+  id: ID;
+  folderId: ID;
+  text: string;
+  done?: boolean;
+  status?: 'want' | 'doing' | 'done';
+  stars?: number;
+  /** Wishlist price in cents. */
+  price?: number;
+  createdAt: number;
 }
 
 export type Priority = 0 | 1 | 2;
@@ -162,5 +208,8 @@ export interface AppData {
   bills: Bill[];
   lists: TaskList[];
   tasks: Task[];
+  folders: Folder[];
+  trackers: TrackerItem[];
+  listItems: ListItem[];
   settings: Settings;
 }

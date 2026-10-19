@@ -1,5 +1,5 @@
 // Starting data: sensible defaults for a fresh install, plus an optional example week.
-import type { AppData, DayTemplate, Expense, Milestone, MilestoneKind, PhoneSettings, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry } from './types';
+import type { AppData, DayTemplate, Expense, Folder, ListItem, Milestone, MilestoneKind, PhoneSettings, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry, TrackerItem } from './types';
 import { addDays, fromISO, msAt, todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 
@@ -30,6 +30,17 @@ export const OLD_DEFAULT_COLORS: Record<string, string[]> = {
 export const CATEGORY_COLORS = ['#8DBA78', '#6E9A5E', '#BFD6A9', '#DCE8CF', '#EE9BB2', '#E58AA6', '#F6C3D1', '#D9A3C6', '#F4DDB0', '#6FAFC0', '#ADA59B', '#CFC8CB'];
 
 export const DRIFT_ID = 'drift';
+
+/** The folders a fresh install starts with in More, alongside the task lists. */
+export function defaultFolders(): Folder[] {
+  return [
+    { id: 'habits', name: 'Habits', emoji: '🌱', type: 'tracker' },
+    { id: 'routines', name: 'Routines', emoji: '🧺', type: 'tracker' },
+    { id: 'groceries', name: 'Groceries', emoji: '🛒', type: 'check' },
+  ];
+}
+
+export const LIST_EMOJI: Record<string, string> = { uni: '🎓', work: '💼', personal: '🌿', chores: '🧹' };
 
 /** Scrolling and video apps count as Drift; music, maps, calls and the camera don't count. Everything else is Drift too. */
 export function defaultPhoneSettings(): PhoneSettings {
@@ -72,6 +83,9 @@ export function defaultData(): AppData {
       { id: 'chores', name: 'Chores' },
     ],
     tasks: [],
+    folders: defaultFolders(),
+    trackers: [],
+    listItems: [],
     settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings() },
   };
 }
@@ -184,5 +198,34 @@ export function sampleData(now: number = Date.now()): AppData {
       { id: uid(), name: 'Gym', amount: 2200, kind: 'need', tags: ['health'], cadence: 'weekly', nextDue: addDays(today, 7) },
     ],
     tasks,
+    trackers: sampleTrackers(today),
+    listItems: sampleListItems(now),
+    folders: [...defaultFolders(), { id: 'books', name: 'Books', emoji: '📚', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', emoji: '🎁', type: 'wish' }],
   };
+}
+
+function sampleTrackers(today: string): TrackerItem[] {
+  const ago = (...ns: number[]) => ns.map((n) => addDays(today, -n)).sort();
+  const t = (folderId: string, name: string, emoji: string, kind: 'since' | 'every', hits: string[], extra: Partial<TrackerItem> = {}): TrackerItem =>
+    ({ id: uid(), folderId, name, emoji, kind, hits, since: addDays(today, -60), ...extra });
+  return [
+    t('habits', 'Doomscrolling past midnight', '📱', 'since', ago(12, 20, 23, 30, 41), { pinned: true }),
+    t('habits', 'Gym', '🏋️', 'every', ago(1, 3, 6, 8, 11, 14, 16, 19), { every: { n: 3, unit: 'day' } }),
+    t('habits', 'Bubble tea', '🧋', 'since', ago(4, 9, 15, 22)),
+    t('habits', 'Call home', '📞', 'every', ago(9, 17, 24), { every: { n: 1, unit: 'week' } }),
+    t('routines', 'Laundry', '👕', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' } }),
+    t('routines', 'Water plants', '🪴', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' } }),
+    t('routines', 'Change bedsheets', '🛏️', 'every', ago(10, 24), { every: { n: 2, unit: 'week' } }),
+    // Rent was paid on the 1st of this month and last month.
+    t('routines', 'Pay rent', '💸', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1 }),
+  ];
+}
+
+function sampleListItems(now: number): ListItem[] {
+  const item = (folderId: string, text: string, extra: Partial<ListItem> = {}): ListItem => ({ id: uid(), folderId, text, createdAt: now, ...extra });
+  return [
+    item('groceries', 'Oat milk'), item('groceries', 'Eggs', { done: true }), item('groceries', 'Matcha powder'), item('groceries', 'Rice'),
+    item('books', 'Piranesi', { status: 'doing' }), item('books', 'Tomorrow, and Tomorrow, and Tomorrow', { status: 'done', stars: 5 }), item('books', 'The Remains of the Day', { status: 'want' }),
+    item('wishlist', 'Ceramic matcha bowl', { price: 3800 }), item('wishlist', 'Film camera', { price: 12000 }),
+  ];
 }

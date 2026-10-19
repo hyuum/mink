@@ -1,9 +1,9 @@
 // Settings and data tools. Kept deliberately plain; the More screen gets its proper design in a later round.
 import { useState, type ChangeEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
-import { go, showToast } from '../../app/ui-state';
+import { moreView, showToast } from '../../app/ui-state';
 import { Band, Card, ChipGroup } from '../../ui/kit';
-import { IconArrowDown, IconRight, IconTrash } from '../../ui/icons';
+import { IconArrowDown, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
 import { PhoneSettingsCard } from '../time/phone';
 import type { TimeCategory } from '../../data/types';
@@ -14,7 +14,8 @@ const STORAGE_TEXT = {
   memory: 'This browser is blocking storage, so changes last until you close the page. Export a backup to keep them.',
 };
 
-export function More() {
+/** Settings: display, activities, phone tracking and your data. Opened from the More hub. */
+export function Settings() {
   const data = useData();
   const s = data.settings;
   const [backup, setBackup] = useState<string | null>(null);
@@ -55,21 +56,12 @@ export function More() {
   return (
     <>
       <Band>
-        <h1>More</h1>
-        <p className="band-sub">Settings and your data.</p>
+        <button type="button" className="backlink" onClick={() => moreView.set({ kind: 'hub' })}>‹ More</button>
+        <h1>Settings</h1>
       </Band>
 
       <div className="content two">
-        <Card title="Planner">
-          <button className="item-main row" style={{ width: '100%', minHeight: 48 }} onClick={() => go('tasks')}>
-            <span className="grow" style={{ fontSize: 15 }}>Tasks</span>
-            <span className="small muted">{data.tasks.filter((t) => !t.done).length} open</span>
-            <IconRight size={16} />
-          </button>
-          <p className="small muted" style={{ marginTop: 8 }}>Trackers, Lists and Journal are being redesigned and will come in a later build.</p>
-        </Card>
-
-        <Card title="Display">
+        <Card title="Display" id="set-display">
           <div className="stack" style={{ gap: 12 }}>
             <p className="label">Theme</p>
             <ChipGroup label="Theme" value={s.theme} onChange={(theme) => actions.updateSettings({ theme })} options={[{ value: 'system', label: 'Match device' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
@@ -90,7 +82,7 @@ export function More() {
           </div>
         </Card>
 
-        <Card title="Time categories">
+        <Card title="Time categories" id="set-activities">
           <div className="stack">
             <p className="small muted">Tap a colour dot to change it. The arrow button draws an activity as a thin arrow on the day, like travel.</p>
             {data.timeCategories.map((c) => <CategoryRow key={c.id} c={c} all={data.timeCategories} />)}
@@ -103,9 +95,9 @@ export function More() {
           </div>
         </Card>
 
-        <PhoneSettingsCard />
+        <div id="set-phone"><PhoneSettingsCard /></div>
 
-        <Card title="Your data">
+        <Card title="Your data" id="set-data">
           <div className="stack">
             <p style={{ fontSize: 14 }}>{STORAGE_TEXT[storageKind]}</p>
             {backup === null ? (

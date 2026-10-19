@@ -1,8 +1,8 @@
-import { useState, type FormEvent } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { actions, useData } from '../../data/store';
 import { allTags, groupTasks, parseTaskInput } from '../../data/logic';
 import { relativeDay, todayISO } from '../../lib/dates';
-import { useNow } from '../../app/ui-state';
+import { moreView, taskListFilter, useNow, go } from '../../app/ui-state';
 import { Band, CheckBox } from '../../ui/kit';
 import { IconPlus } from '../../ui/icons';
 import { TaskEditor } from './TaskEditor';
@@ -11,7 +11,10 @@ export function Tasks() {
   const data = useData();
   const now = useNow(60_000);
   const today = todayISO(now);
-  const [list, setList] = useState<string>('all');
+  // Opened from a task folder in More: start on that list, with a way back.
+  const [fromMore] = useState(() => taskListFilter.get() !== null);
+  const [list, setList] = useState<string>(() => taskListFilter.get() ?? 'all');
+  useEffect(() => { taskListFilter.set(null); }, []);
   const [tag, setTag] = useState<string | null>(null);
   const [showDone, setShowDone] = useState(false);
   const [edit, setEdit] = useState<string | null>(null);
@@ -45,6 +48,7 @@ export function Tasks() {
   return (
     <>
       <Band>
+        {fromMore && <button type="button" className="backlink" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>‹ More</button>}
         <div className="band-row">
           <h1>Tasks</h1>
           <span className="band-sub">{dueToday === 0 ? 'Nothing due today' : `${dueToday} due today`}</span>

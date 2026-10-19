@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Priority, SpendKind, Task, TimeEntry } from './types';
+import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Priority, SpendKind, Task, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 import { DRIFT_ID, MILESTONE_KINDS } from './seed';
 
@@ -252,6 +252,68 @@ export function phoneSuggestions(sessions: PhoneSession[], entries: TimeEntry[],
     }
   }
   return out;
+}
+
+/* ---------- Trackers: habits and routines ---------- */
+
+export const daysBetween = (a: Day, b: Day) => Math.round((dayStartMs(b) - dayStartMs(a)) / 86_400_000);
+const UNIT_DAYS = { day: 1, week: 7, month: 31 } as const;
+
+/** `day` moved by whole months, keeping the day of the month where it can (31 Jan + 1 month = 28/29 Feb). */
+export function addMonthsToDay(day: Day, n: number, dom?: number): Day {
+  const d = fromISO(day);
+  const first = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return toISO(new Date(first.getFullYear(), first.getMonth(), Math.min(dom ?? d.getDate(), last)));
+}
+
+/** When a repeating item is next due: a set time after it was last done (or added), or the next set day of the month. */
+export function repeatDue(t: TrackerItem): Day {
+  const every = t.every ?? { n: 1, unit: 'week' as const };
+  const last = t.hits.length ? t.hits[t.hits.length - 1] : null;
+  const base = last ?? t.since;
+  if (every.unit === 'month' && t.onDay) {
+    // The first chosen day of the month after it was last done (or on/after the day it was added).
+    let due = addMonthsToDay(base, 0, t.onDay);
+    if (last ? due <= base : due < base) due = addMonthsToDay(base, 1, t.onDay);
+    return last && every.n > 1 ? addMonthsToDay(due, every.n - 1, t.onDay) : due;
+  }
+  if (every.unit === 'month') return addMonthsToDay(base, every.n);
+  return addDays(base, every.n * UNIT_DAYS[every.unit]);
+}
+
+export type TrackerStatus =
+  | { kind: 'since'; days: number; best: number }
+  | { kind: 'every'; due: Day; daysLeft: number; doneToday: boolean; streak: number };
+
+export function trackerStatus(t: TrackerItem, today: Day): TrackerStatus {
+  if (t.kind === 'since') {
+    const points = [t.since, ...t.hits, today];
+    let best = 0;
+    for (let i = 1; i < points.length; i++) best = Math.max(best, daysBetween(points[i - 1], points[i]));
+    const last = t.hits.length ? t.hits[t.hits.length - 1] : t.since;
+    return { kind: 'since', days: Math.max(0, daysBetween(last, today)), best };
+  }
+  const due = repeatDue(t);
+  const every = t.every ?? { n: 1, unit: 'week' as const };
+  const gap = every.n * UNIT_DAYS[every.unit];
+  // Streak: done each time within its interval, counting back from the latest, while it isn't overdue.
+  let streak = 0;
+  if (t.hits.length && due >= today) {
+    streak = 1;
+    for (let i = t.hits.length - 1; i > 0 && daysBetween(t.hits[i - 1], t.hits[i]) <= gap; i--) streak++;
+  }
+  return { kind: 'every', due, daysLeft: daysBetween(today, due), doneToday: t.hits.includes(today), streak };
+}
+
+/** Repeating items due today or overdue (and not done today), most overdue first. */
+export function dueTrackers(trackers: TrackerItem[], today: Day): { item: TrackerItem; daysLeft: number }[] {
+  return trackers
+    .filter((t) => t.kind === 'every')
+    .map((item) => ({ item, s: trackerStatus(item, today) }))
+    .filter(({ s }) => s.kind === 'every' && s.daysLeft <= 0 && !s.doneToday)
+    .map(({ item, s }) => ({ item, daysLeft: s.kind === 'every' ? s.daysLeft : 0 }))
+    .sort((a, b) => a.daysLeft - b.daysLeft);
 }
 
 /* ---------- Milestones ---------- */

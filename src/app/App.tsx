@@ -8,7 +8,7 @@ import { TimeSummary } from '../features/time/TimeSummary';
 import { TimeWeek } from '../features/time/TimeWeek';
 import { Money } from '../features/money/Money';
 import { Tasks } from '../features/tasks/Tasks';
-import { More } from '../features/more/More';
+import { More } from '../features/more/Hub';
 import { QuickAdd } from '../features/add/QuickAdd';
 
 const SCREENS = { home: Home, time: TimeDay, week: TimeWeek, stats: TimeSummary, money: Money, tasks: Tasks, more: More };

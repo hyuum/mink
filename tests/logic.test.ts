@@ -274,3 +274,22 @@ test('phone sessions become suggestions: ignored apps drop, short gaps join, log
   assert.equal(phoneSuggestions(sessions, logged, s, [out[0].key], at(20)).length, 2, 'dismissed ones stay hidden');
   assert.equal(phoneSuggestions(sessions, logged, { ...s, defaultCategoryId: null }, [], at(20)).length, 1, 'unknown apps can be left out');
 });
+
+test('trackers: repeats come due, monthly ones can land on a set day, days-since counts up', async () => {
+  const { repeatDue, trackerStatus, dueTrackers, addMonthsToDay } = await import('../src/data/logic.ts');
+  const base = { id: 'x', folderId: 'f', name: 'Laundry', emoji: '👕', since: '2026-09-01' };
+  const weekly = { ...base, kind: 'every' as const, every: { n: 1, unit: 'week' as const }, hits: ['2026-10-12'] };
+  assert.equal(repeatDue(weekly), '2026-10-19');
+  const st = trackerStatus(weekly, '2026-10-21');
+  assert.ok(st.kind === 'every' && st.daysLeft === -2 && !st.doneToday);
+  assert.equal(dueTrackers([weekly], '2026-10-21').length, 1);
+  assert.equal(dueTrackers([{ ...weekly, hits: ['2026-10-12', '2026-10-21'] }], '2026-10-21').length, 0, 'done today drops off');
+  const rent = { ...base, name: 'Rent', kind: 'every' as const, every: { n: 1, unit: 'month' as const }, onDay: 1, hits: ['2026-09-29'] };
+  assert.equal(repeatDue(rent), '2026-10-01', 'paid early in September: due on the 1st of October');
+  assert.equal(repeatDue({ ...rent, hits: ['2026-10-01'] }), '2026-11-01');
+  assert.equal(repeatDue({ ...rent, hits: [], since: '2026-10-15' }), '2026-11-01', 'new: the next 1st');
+  assert.equal(addMonthsToDay('2026-01-31', 1), '2026-02-28');
+  const since = { ...base, name: 'Bubble tea', kind: 'since' as const, hits: ['2026-10-01', '2026-10-10'] };
+  const s = trackerStatus(since, '2026-10-19');
+  assert.ok(s.kind === 'since' && s.days === 9 && s.best === 30);
+});

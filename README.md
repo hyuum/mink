@@ -10,9 +10,9 @@ Everything is stored on your device (IndexedDB). There is no account and no serv
 - **Money:** one weekly allowance (Monday–Sunday) with money left and a per-day pace. Every spend must be marked need or want; tags are optional. Week view shows need vs want, each day against the pace, and tag totals. Month view is the calendar month against 4 × the weekly allowance, split by week. Recurring bills count toward the week they're paid in.
 - **Tasks:** separate lists, #tags, priority (`!` or `!!`), due dates, and groups for Overdue, Today, Next 7 days, Later, No date and Done.
 - **Quick add (+):** log spending (keypad, need/want, tags), time or a task from any screen.
-- **More:** theme, timeline hours, daily goal, stickers, activities (add, rename, recolour, draw as an arrow, delete and move their time elsewhere), backup and restore, and the example week.
+- **More:** folders, like a notes app: your task lists, **trackers** (habits and routines: "days since" for things to avoid, or repeats every N days, weeks or months, or monthly on a set day, with Done buttons and what's due), **checklists**, **collections** (want, now, done, with stars) and **wishlists** (with prices; "Bought" logs it on Money). What's due today shows at the top of More and on Home, and a tracker can be pinned to Home. Settings (activities, phone tracking, theme and day timeline, your data) are listed underneath.
 
-Not built yet (waiting on redesigns): Trackers, Lists (with tags), Journal and a proper More screen.
+
 
 ## Run it
 

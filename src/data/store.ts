@@ -1,8 +1,8 @@
 // The app's single source of truth: an immutable AppData snapshot, React subscriptions,
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
-import type { AppData, Bill, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry } from './types';
-import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, sampleData } from './seed';
+import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry, TrackerItem } from './types';
+import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, defaultFolders, sampleData } from './seed';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
 import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
 import { uid } from '../lib/id';
@@ -95,6 +95,9 @@ export function migrate(raw: unknown): AppData {
     bills,
     lists: arr(d.lists, base.lists),
     tasks: arr(d.tasks, []),
+    folders: arr(d.folders, defaultFolders()),
+    trackers: arr(d.trackers, []),
+    listItems: arr(d.listItems, []),
     settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) } },
   };
 }
@@ -397,8 +400,77 @@ export const actions = {
     update((d) => ({ ...d, tasks: remove(d.tasks, id) }));
     return before;
   },
-  addList(name: string) {
-    update((d) => ({ ...d, lists: [...d.lists, { id: uid(), name }] }));
+  addList(name: string, emoji?: string): ID {
+    const id = uid();
+    update((d) => ({ ...d, lists: [...d.lists, { id, name, ...(emoji ? { emoji } : {}) }] }));
+    return id;
+  },
+  /** Delete a task list and its tasks. Keeps at least one list. */
+  deleteList(id: ID): AppData {
+    const before = state;
+    update((d) => (d.lists.length < 2 ? d : { ...d, lists: remove(d.lists, id), tasks: d.tasks.filter((t) => t.listId !== id) }));
+    return before;
+  },
+
+  /* Folders in More: trackers, checklists, collections, wishlists */
+  addFolder(f: Omit<Folder, 'id'>): ID {
+    const id = uid();
+    update((d) => ({ ...d, folders: [...d.folders, { ...f, id }] }));
+    return id;
+  },
+  updateFolder(id: ID, patch: Partial<Omit<Folder, 'id' | 'type'>>) {
+    update((d) => ({ ...d, folders: replace<Folder>(d.folders, id, patch) }));
+  },
+  /** Delete a folder and everything in it. */
+  deleteFolder(id: ID): AppData {
+    const before = state;
+    update((d) => ({ ...d, folders: remove(d.folders, id), trackers: d.trackers.filter((t) => t.folderId !== id), listItems: d.listItems.filter((i) => i.folderId !== id) }));
+    return before;
+  },
+  addTracker(t: Omit<TrackerItem, 'id'>) {
+    update((d) => ({ ...d, trackers: [...d.trackers, { ...t, id: uid() }] }));
+  },
+  updateTracker(id: ID, patch: Partial<Omit<TrackerItem, 'id'>>) {
+    update((d) => ({ ...d, trackers: replace<TrackerItem>(d.trackers, id, patch) }));
+  },
+  deleteTracker(id: ID): AppData {
+    const before = state;
+    update((d) => ({ ...d, trackers: remove(d.trackers, id) }));
+    return before;
+  },
+  /** Mark a tracker as done (or as having happened) on a day. Returns the earlier snapshot for Undo. */
+  hitTracker(id: ID, day: string): AppData {
+    const before = state;
+    update((d) => ({ ...d, trackers: d.trackers.map((t) => (t.id === id && !t.hits.includes(day) ? { ...t, hits: [...t.hits, day].sort() } : t)) }));
+    return before;
+  },
+  addListItem(i: Omit<ListItem, 'id' | 'createdAt'>) {
+    update((d) => ({ ...d, listItems: [...d.listItems, { ...i, id: uid(), createdAt: Date.now() }] }));
+  },
+  updateListItem(id: ID, patch: Partial<Omit<ListItem, 'id'>>) {
+    update((d) => ({ ...d, listItems: replace<ListItem>(d.listItems, id, patch) }));
+  },
+  deleteListItem(id: ID): AppData {
+    const before = state;
+    update((d) => ({ ...d, listItems: remove(d.listItems, id) }));
+    return before;
+  },
+  clearTicked(folderId: ID): AppData {
+    const before = state;
+    update((d) => ({ ...d, listItems: d.listItems.filter((i) => !(i.folderId === folderId && i.done)) }));
+    return before;
+  },
+  /** Buy something from a wishlist: logs it as a "want" expense today and takes it off the list. */
+  buyWish(id: ID, today: string): AppData {
+    const before = state;
+    const item = state.listItems.find((i) => i.id === id);
+    if (!item) return before;
+    update((d) => ({
+      ...d,
+      listItems: remove(d.listItems, id),
+      expenses: [...d.expenses, { id: uid(), amount: item.price ?? 0, kind: 'want', tags: ['wishlist'], note: item.text, day: today, createdAt: Date.now() }],
+    }));
+    return before;
   },
   renameList(id: ID, name: string) {
     update((d) => ({ ...d, lists: replace(d.lists, id, { name }) }));
@@ -439,7 +511,7 @@ export const actions = {
   },
   /** Start fresh: keep categories, lists and settings, clear every record. */
   startFresh() {
-    update((d) => ({ ...d, example: false, entries: [], planned: [], planDays: [], milestones: [], expenses: [], bills: [], tasks: [] }));
+    update((d) => ({ ...d, example: false, entries: [], planned: [], planDays: [], milestones: [], expenses: [], bills: [], tasks: [], trackers: [], listItems: [] }));
   },
   loadExample() {
     const s = sampleData();
