@@ -58,11 +58,11 @@ export function TimeDay() {
   const today = todayISO(now);
   const day = timeDay.use() ?? today;
   const [slideDir, setSlideDir] = useState<0 | 1 | -1>(0);
-  // On a swipe, the time of day in the middle of the screen, so the next day opens at the same time.
-  const keepScroll = useRef<number | null>(null);
+  // A swipe opens the new day at its top instead of at "now".
+  const swiped = useRef(false);
   const setDay = (d: string, fromSwipe = false) => {
     setSlideDir(d > (timeDay.get() ?? today) ? 1 : -1);
-    keepScroll.current = fromSwipe && grid.current ? minAt(window.innerHeight / 2) : null;
+    swiped.current = fromSwipe;
     timeDay.set(d === today ? null : d);
   };
   const [edit, setEdit] = useState<EditTarget | null>(null);
@@ -186,11 +186,9 @@ export function TimeDay() {
   useEffect(() => {
     const el = grid.current;
     if (!el) return;
-    // Swiping between days keeps the same time in view.
-    const kept = keepScroll.current;
-    keepScroll.current = null;
-    const target = kept ?? nowMin ?? all[0]?.startMin ?? h0 * 60;
-    const y = el.getBoundingClientRect().top + window.scrollY + top(target) - window.innerHeight * (kept !== null ? 0.5 : 0.4);
+    if (swiped.current) { swiped.current = false; window.scrollTo({ top: 0 }); return; }
+    const target = nowMin ?? all[0]?.startMin ?? h0 * 60;
+    const y = el.getBoundingClientRect().top + window.scrollY + top(target) - window.innerHeight * 0.4;
     window.scrollTo({ top: Math.max(0, y) });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day]);
