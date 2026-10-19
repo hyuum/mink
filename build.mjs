@@ -14,6 +14,11 @@ const FONT_LINK =
   '<link rel="preconnect" href="https://fonts.googleapis.com">' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&display=swap">';
 
+// Each build stamps the service worker's cache name, so installed apps notice every release
+// and show the "new version" bar, even when sw.js itself didn't change. Settings shows the time too.
+const BUILT_AT = Date.now();
+const BUILD = BUILT_AT.toString(36);
+
 const common = {
   entryPoints: ['src/main.tsx'],
   bundle: true,
@@ -23,7 +28,7 @@ const common = {
   jsx: 'automatic',
   legalComments: 'none',
   logLevel: 'info',
-  define: { __PREVIEW__: 'false' },
+  define: { __PREVIEW__: 'false', __BUILT_AT__: String(BUILT_AT) },
 };
 
 // Maps react imports to the globals the CDN builds define (window.React, window.ReactDOM).
@@ -40,9 +45,6 @@ const reactGlobals = {
   },
 };
 
-// Each build stamps the service worker's cache name, so installed apps notice every release
-// and show the "new version" bar, even when sw.js itself didn't change.
-const BUILD = Date.now().toString(36);
 async function copyPublic(out) {
   for (const f of await readdir('public')) {
     if (f === 'sw.js') {
@@ -96,7 +98,7 @@ if (serve) {
   await copyPublic('dist');
 
   // 2. Single-file preview (React 18 from cdnjs, app code inline)
-  const result = await esbuild.build({ ...common, write: false, plugins: [reactGlobals], define: { __PREVIEW__: 'true' } });
+  const result = await esbuild.build({ ...common, write: false, plugins: [reactGlobals], define: { __PREVIEW__: 'true', __BUILT_AT__: String(BUILT_AT) } });
   const js = result.outputFiles[0].text.replace(/<\/script/gi, '<\\/script');
   const preview = `<title>Matcha Planner</title>
 ${FONT_LINK}

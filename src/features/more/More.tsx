@@ -6,6 +6,7 @@ import { Band, Card, ChipGroup } from '../../ui/kit';
 import { IconArrowDown, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
 import { PhoneSettingsCard } from '../time/phone';
+import { phoneAvailable } from '../../lib/phone';
 import type { TimeCategory } from '../../data/types';
 
 const STORAGE_TEXT = {
@@ -141,9 +142,17 @@ export function Settings() {
             )}
           </div>
         </Card>
+        <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p>
       </div>
     </>
   );
+}
+
+/** Which build this is, e.g. "Android app · version 19 Oct, 1:28 pm". */
+function builtLabel() {
+  const d = new Date(__BUILT_AT__);
+  const when = `${d.toLocaleDateString('en-AU', { day: 'numeric', month: 'short' })}, ${d.toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}`;
+  return `${phoneAvailable() ? 'Android app' : 'Web app'} · version ${when}`;
 }
 
 /** One activity: colour, name, drawn as an arrow or a block, and delete (moving its time somewhere else). */
