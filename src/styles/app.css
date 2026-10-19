@@ -545,7 +545,18 @@ h1, h2, h3, p { margin: 0; }
 
 /* Week strip: a pill slides under the days and follows the finger while swiping between days. */
 .days { position: relative; }
-.day-ind { position: absolute; left: 0; top: 0; bottom: 0; border-radius: 14px; background: var(--band-chip-on); transition: transform .22s cubic-bezier(.3,.7,.3,1); pointer-events: none; }
+.day-ind { align-self: stretch; border-radius: 14px; background: var(--band-chip-on); transition: transform .25s cubic-bezier(.3,.7,.3,1); pointer-events: none; }
+/* Outside planning the strip floats over the page, so showing and hiding it never moves the day. */
+.band:has(.week-strip.floating) { position: relative; z-index: 6; }
+.week-strip.floating { position: absolute; left: 12px; right: 12px; top: calc(100% - 10px); z-index: 6; padding: 6px 4px; background: color-mix(in srgb, var(--card) 94%, transparent); border-radius: 18px; box-shadow: 0 8px 24px rgba(38, 48, 34, .16); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+/* Changing day: the new day slides in from the side you swiped towards; a short swipe springs back. */
+.timeline { transition: transform .2s ease-out; }
+.timeline.dragging { transition: none; }
+.timeline.slide-next { animation: slide-next .22s ease-out; }
+.timeline.slide-prev { animation: slide-prev .22s ease-out; }
+@keyframes slide-next { from { transform: translateX(48px); opacity: .4; } }
+@keyframes slide-prev { from { transform: translateX(-48px); opacity: .4; } }
+@media (prefers-reduced-motion: reduce) { .timeline.slide-next, .timeline.slide-prev { animation: none; } }
 .days:has(.day-ind) .day { position: relative; z-index: 1; }
 .days:has(.day-ind) .day[aria-pressed="true"] { background: transparent; }
 @media (prefers-reduced-motion: reduce) { .day-ind { transition: none; } }

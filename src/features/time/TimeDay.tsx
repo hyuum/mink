@@ -57,7 +57,14 @@ export function TimeDay() {
   const now = useNow(running ? 1000 : 30_000);
   const today = todayISO(now);
   const day = timeDay.use() ?? today;
-  const setDay = (d: string) => timeDay.set(d === today ? null : d);
+  const [slideDir, setSlideDir] = useState<0 | 1 | -1>(0);
+  // On a swipe, the time of day in the middle of the screen, so the next day opens at the same time.
+  const keepScroll = useRef<number | null>(null);
+  const setDay = (d: string, fromSwipe = false) => {
+    setSlideDir(d > (timeDay.get() ?? today) ? 1 : -1);
+    keepScroll.current = fromSwipe && grid.current ? minAt(window.innerHeight / 2) : null;
+    timeDay.set(d === today ? null : d);
+  };
   const [edit, setEdit] = useState<EditTarget | null>(null);
   const [sleepDrag, setSleepDrag] = useState<{ kind: 'wake' | 'bed'; min: number } | null>(null);
   const [tipSeen, setTipSeen] = useState(readTipSeen);
@@ -67,7 +74,6 @@ export function TimeDay() {
   // A sideways swipe: on the date or the day it moves a day, on the week strip a week. The strip follows the finger.
   const swipe = useRef<{ x: number; y: number; unit: 1 | 7; on: boolean } | null>(null);
   const [swipeDx, setSwipeDx] = useState<{ dx: number; unit: 1 | 7 } | null>(null);
-  const daysRow = useRef<HTMLDivElement>(null);
   const beginSwipe = (x: number, y: number, unit: 1 | 7) => { swipe.current = { x, y, unit, on: false }; };
   const moveSwipe = (x: number, y: number) => {
     const s = swipe.current;
@@ -83,7 +89,7 @@ export function TimeDay() {
     setSwipeDx(null);
     if (!s?.on) return false;
     const dx = x - s.x;
-    if (Math.abs(dx) > 50) setDay(addDays(day, (dx < 0 ? 1 : -1) * s.unit));
+    if (Math.abs(dx) > 50) setDay(addDays(day, (dx < 0 ? 1 : -1) * s.unit), true);
     flashStrip(s.unit === 7 ? 4000 : 2500);
     return true;
   };
@@ -126,8 +132,7 @@ export function TimeDay() {
   const dayIx = week.indexOf(day);
   const shift = swipeDx?.unit === 1 ? Math.max(-1, Math.min(1, -swipeDx.dx / 90)) : 0;
   const shownDay = Math.abs(shift) > 0.5 ? addDays(day, shift > 0 ? 1 : -1) : day;
-  const colW = (daysRow.current?.clientWidth ?? 0) / 7;
-  const indicator = colW && dayIx >= 0 ? { width: colW - 4, transform: `translateX(${(dayIx + shift) * colW}px)`, transition: swipeDx ? 'none' : undefined } : null;
+  const indicator = dayIx >= 0 ? { transform: `translateX(calc(${dayIx + shift} * (100% + 4px)))`, transition: swipeDx ? 'none' : undefined } : null;
   const weekShift = swipeDx?.unit === 7 ? { transform: `translateX(${swipeDx.dx * 0.5}px)`, opacity: 1 - Math.min(0.5, Math.abs(swipeDx.dx) / 300) } : undefined;
   const phone = usePhoneSuggestions(day, today);
   const dayStart = dayStartMs(day);
@@ -181,8 +186,11 @@ export function TimeDay() {
   useEffect(() => {
     const el = grid.current;
     if (!el) return;
-    const target = nowMin ?? all[0]?.startMin ?? h0 * 60;
-    const y = el.getBoundingClientRect().top + window.scrollY + top(target) - window.innerHeight * 0.4;
+    // Swiping between days keeps the same time in view.
+    const kept = keepScroll.current;
+    keepScroll.current = null;
+    const target = kept ?? nowMin ?? all[0]?.startMin ?? h0 * 60;
+    const y = el.getBoundingClientRect().top + window.scrollY + top(target) - window.innerHeight * (kept !== null ? 0.5 : 0.4);
     window.scrollTo({ top: Math.max(0, y) });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [day]);
@@ -231,13 +239,19 @@ export function TimeDay() {
     g.cy = clientY;
     const dy = clientY - g.y0;
     if (g.type === 'swipe') { moveSwipe(clientX, clientY); return; }
-    // Sideways before anything else: turn this into a swipe between days.
-    if (!g.moved && (g.type === 'range' || g.type === 'press') && Math.abs(clientX - g.x0) > 12 && Math.abs(clientX - g.x0) > 1.5 * Math.abs(dy)) {
-      gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, moved: true };
-      beginSwipe(g.x0, g.y0, 1);
-      moveSwipe(clientX, clientY);
-      setRange(null);
-      return;
+    // Decide once, after the first few pixels: sideways is a swipe between days, up or down is the timeline.
+    if (!g.moved && (g.type === 'range' || g.type === 'press')) {
+      const dx = clientX - g.x0;
+      if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      if (Math.abs(dx) > Math.abs(dy)) {
+        gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, moved: true };
+        beginSwipe(g.x0, g.y0, 1);
+        swipe.current!.on = true;
+        clearTimeout(stripTimer.current);
+        setStrip(true);
+        moveSwipe(clientX, clientY);
+        return;
+      }
     }
     if (Math.abs(dy) > 6) g.moved = true;
     if (g.type === 'range') {
@@ -510,18 +524,18 @@ export function TimeDay() {
           </div>
         </div>
         {stripOpen && <div
-          className="row week-strip swipe-zone" style={{ gap: 2 }}
+          className={`row week-strip swipe-zone ${planMode ? '' : 'floating'}`} style={{ gap: 2 }}
           onPointerDown={(e) => beginSwipe(e.clientX, e.clientY, 7)}
           onPointerMove={(e) => moveSwipe(e.clientX, e.clientY)}
           onPointerUp={(e) => { if (endSwipe(e.clientX)) e.preventDefault(); }}
           onPointerCancel={cancelSwipe}
         >
-          <div className="days grow" ref={daysRow} style={weekShift}>
-            {indicator && <span className="day-ind" style={indicator} aria-hidden="true" />}
-            {weekDays(day).map((d) => {
+          <div className="days grow" style={weekShift}>
+            {indicator && <span className="day-ind" style={{ ...indicator, gridColumn: 1, gridRow: 1 }} aria-hidden="true" />}
+            {weekDays(day).map((d, i) => {
               const t = templateFor(data.templates, d);
               return (
-                <button key={d} className="day" aria-pressed={d === shownDay} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
+                <button key={d} style={{ gridColumn: i + 1, gridRow: 1 }} className="day" aria-pressed={d === shownDay} aria-label={`${weekdayLong(d)} ${dayNum(d)}${t ? `, ${t.name}` : ''}`} onClick={() => setDay(d)}>
                   <small>{weekdayShort(d)}</small>
                   <b>{dayNum(d)}</b>
                   {planMode && <em>{t ? t.name.split(' ')[0] : ''}</em>}
@@ -569,7 +583,8 @@ export function TimeDay() {
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
           </div>
-          <div className={`timeline ${planMode ? 'planning' : ''}`} ref={grid} style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8, ...(swipeDx?.unit === 1 ? { transform: `translateX(${Math.max(-60, Math.min(60, swipeDx.dx * 0.3))}px)`, opacity: 1 - Math.min(0.35, Math.abs(swipeDx.dx) / 400) } : {}) }}>
+          <div key={day} className={`timeline ${planMode ? 'planning' : ''} ${slideDir === 1 ? 'slide-next' : slideDir === -1 ? 'slide-prev' : ''} ${swipeDx ? 'dragging' : ''}`} ref={grid}
+            style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8, ...(swipeDx?.unit === 1 ? { transform: `translateX(${Math.max(-90, Math.min(90, swipeDx.dx * 0.45))}px)` } : {}) }}>
             {hours.map((hr) => (
               <div key={hr} className={`hr ${hr % 2 ? 'odd' : ''}`} style={{ top: top(hr * 60) }}>
                 {hr % 2 === 0 && <span className="hour-label">{hourLabel(hr)}</span>}
