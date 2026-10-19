@@ -1,6 +1,6 @@
 // Offline support. The app's own files come from the network when it's reachable, so a new version
 // shows up on the next open; the saved copy is used when offline or when the network is too slow.
-const CACHE = 'matcha-planner-v3-mven49kg';
+const CACHE = 'matcha-planner-v3-mvf6gexo';
 const SHELL = ['./', 'index.html', 'app.js', 'app.css', 'manifest.webmanifest', 'icon.svg'];
 const SLOW_MS = 3000;
 

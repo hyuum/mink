@@ -3,12 +3,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { actions, useData } from '../../data/store';
 import { dueTrackers, trackerStatus } from '../../data/logic';
-import { LIST_EMOJI } from '../../data/seed';
 import type { Folder, FolderType, ID, ListItem, RepeatUnit, TrackerItem } from '../../data/types';
 import { addDays, todayISO } from '../../lib/dates';
 import { fmtMoney, parseAmount } from '../../lib/money';
 import { go, moreView, showToast, taskListFilter, useNow } from '../../app/ui-state';
 import { Band, Sheet } from '../../ui/kit';
+import { FOLDER_ICONS, TRACKER_ICONS } from '../../data/icons';
+import { IconChoice, ThingIcon } from '../../ui/things';
 import { Settings } from './More';
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
@@ -18,7 +19,6 @@ const everyText = (t: TrackerItem) => {
   return e.n === 1 ? `every ${e.unit}` : `every ${e.n} ${e.unit}s`;
 };
 const ordinal = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
-export const listEmoji = (l: { id: string; emoji?: string }) => l.emoji ?? LIST_EMOJI[l.id] ?? '☑️';
 
 /** "Due today", "Due in 3 days", "2 days overdue"… */
 function dueText(t: TrackerItem, today: string): { text: string; tone: '' | 'today' | 'late' } {
@@ -91,7 +91,7 @@ function Hub() {
             const openTasks = data.tasks.filter((t) => t.listId === l.id && !t.done);
             return (
               <button key={l.id} type="button" className="rowbtn" onClick={() => { taskListFilter.set(l.id); go('tasks'); }}>
-                <span className="ico">{listEmoji(l)}</span>
+                <span className="ico"><ThingIcon name={l.icon} /></span>
                 <span className="grow"><b>{l.name}</b><small>{openTasks.length ? openTasks.slice(0, 2).map((t) => t.title).join(', ') : 'No open tasks'}</small></span>
                 <span className="count">{openTasks.length}</span><span className="chev" aria-hidden="true">›</span>
               </button>
@@ -99,7 +99,7 @@ function Hub() {
           })}
           {data.folders.map((f) => (
             <button key={f.id} type="button" className="rowbtn" onClick={() => open(f.id)}>
-              <span className="ico">{f.emoji}</span>
+              <span className="ico"><ThingIcon name={f.icon} /></span>
               <span className="grow"><b>{f.name}</b><small>{preview(f)}</small></span>
               <span className="count">{count(f)}</span><span className="chev" aria-hidden="true">›</span>
             </button>
@@ -137,7 +137,7 @@ function TrackerRow({ t, today }: { t: TrackerItem; today: string }) {
   return (
     <div className="tgroup">
       <div className="trow">
-        <span className="emoji" aria-hidden="true">{t.emoji}</span>
+        <span className="ticon"><ThingIcon name={t.icon} size={22} /></span>
         <button type="button" className="main" aria-expanded={open} onClick={() => setOpen(!open)}>
           <b>{t.name}</b>
           {s.kind === 'since'
@@ -169,20 +169,18 @@ function TrackerRow({ t, today }: { t: TrackerItem; today: string }) {
   );
 }
 
-const TRACKER_EMOJI = ['✨', '👕', '🪴', '🧹', '🛏️', '💸', '💊', '🏃', '📱', '🧋', '📞', '🦷'];
-
 function AddTrackerSheet({ folderId, open, onClose }: { folderId: ID; open: boolean; onClose: () => void }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'every' | 'since'>('every');
   const [n, setN] = useState(1);
   const [unit, setUnit] = useState<RepeatUnit>('week');
   const [onDay, setOnDay] = useState(0);
-  const [emoji, setEmoji] = useState(TRACKER_EMOJI[0]);
+  const [icon, setIcon] = useState(TRACKER_ICONS[0]);
   const today = todayISO();
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    actions.addTracker({ folderId, name: name.trim(), emoji, kind, hits: [], since: today, ...(kind === 'every' ? { every: { n, unit }, ...(unit === 'month' && onDay ? { onDay } : {}) } : {}) });
+    actions.addTracker({ folderId, name: name.trim(), icon, kind, hits: [], since: today, ...(kind === 'every' ? { every: { n, unit }, ...(unit === 'month' && onDay ? { onDay } : {}) } : {}) });
     showToast(`Added ${name.trim()}`);
     setName(''); onClose();
   };
@@ -210,7 +208,7 @@ function AddTrackerSheet({ folderId, open, onClose }: { folderId: ID; open: bool
             )}
           </div>
         )}
-        <div className="emojis">{TRACKER_EMOJI.map((e) => <button key={e} type="button" aria-pressed={emoji === e} onClick={() => setEmoji(e)}>{e}</button>)}</div>
+        <IconChoice icons={TRACKER_ICONS} value={icon} onPick={setIcon} />
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn green grow">Add</button>
@@ -255,7 +253,7 @@ function FolderView({ id }: { id: ID }) {
       <Band>
         <button type="button" className="backlink" onClick={() => moreView.set({ kind: 'hub' })}>‹ More</button>
         <div className="band-row">
-          <h1>{folder.emoji} {folder.name}</h1>
+          <h1 className="folder-title"><ThingIcon name={folder.icon} size={24} />{folder.name}</h1>
           <div className="row" style={{ gap: 8 }}>
             {folder.type === 'check' && items.some((i) => i.done) && (
               <button type="button" className="act" onClick={() => { const before = actions.clearTicked(id); showToast('Cleared ticked items', before); }}>Clear ticked</button>
@@ -331,7 +329,6 @@ function ListRow({ item, type, today }: { item: ListItem; type: FolderType; toda
 
 /* ---------- Making and editing folders ---------- */
 
-const FOLDER_EMOJI = ['📁', '🌱', '🧺', '🛒', '📚', '🎁', '🍜', '🎬', '✈️', '💊', '🐾', '🎵', '🎓', '💼'];
 const TYPES: { type: FolderType | 'tasks'; name: string; hint: string }[] = [
   { type: 'tasks', name: 'Tasks', hint: 'To-dos with due dates' },
   { type: 'tracker', name: 'Tracker', hint: 'Habits and chores: days since, or every week or month' },
@@ -343,12 +340,12 @@ const TYPES: { type: FolderType | 'tasks'; name: string; hint: string }[] = [
 function NewFolderSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
   const [name, setName] = useState('');
   const [type, setType] = useState<FolderType | 'tasks'>('tracker');
-  const [emoji, setEmoji] = useState(FOLDER_EMOJI[0]);
+  const [icon, setIcon] = useState(FOLDER_ICONS[0]);
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    if (type === 'tasks') { const id = actions.addList(name.trim(), emoji); taskListFilter.set(id); go('tasks'); }
-    else { const id = actions.addFolder({ name: name.trim(), emoji, type }); moreView.set({ kind: 'folder', id }); }
+    if (type === 'tasks') { const id = actions.addList(name.trim(), icon); taskListFilter.set(id); go('tasks'); }
+    else { const id = actions.addFolder({ name: name.trim(), icon, type }); moreView.set({ kind: 'folder', id }); }
     showToast(`Made ${name.trim()}`);
     setName(''); onClose();
   };
@@ -362,7 +359,7 @@ function NewFolderSheet({ open, onClose }: { open: boolean; onClose: () => void 
             <button key={t.type} type="button" className="type" aria-pressed={type === t.type} onClick={() => setType(t.type)}><b>{t.name}</b><small>{t.hint}</small></button>
           ))}
         </div>
-        <div className="emojis">{FOLDER_EMOJI.map((e) => <button key={e} type="button" aria-pressed={emoji === e} onClick={() => setEmoji(e)}>{e}</button>)}</div>
+        <IconChoice icons={FOLDER_ICONS} value={icon} onPick={setIcon} />
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
           <button type="submit" className="btn green grow">Make folder</button>
@@ -379,7 +376,7 @@ function FolderOptions({ folder, open, onClose }: { folder: Folder; open: boolea
       <div className="stack" style={{ gap: 12 }}>
         <h2>Folder</h2>
         <input className="field-input" aria-label="Folder name" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && actions.updateFolder(folder.id, { name: name.trim() })} />
-        <div className="emojis">{FOLDER_EMOJI.map((e) => <button key={e} type="button" aria-pressed={folder.emoji === e} onClick={() => actions.updateFolder(folder.id, { emoji: e })}>{e}</button>)}</div>
+        <IconChoice icons={FOLDER_ICONS} value={folder.icon} onPick={(n) => actions.updateFolder(folder.id, { icon: n })} />
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn danger" onClick={() => { const before = actions.deleteFolder(folder.id); moreView.set({ kind: 'hub' }); onClose(); showToast(`Deleted ${folder.name}`, before); }}>Delete folder</button>
           <button type="button" className="btn green grow" onClick={() => { if (name.trim()) actions.updateFolder(folder.id, { name: name.trim() }); onClose(); }}>Done</button>

@@ -56,3 +56,7 @@ tests/        logic.test.ts (node:test), smoke.py (Playwright walk-through at ph
 - **Plans:** a day shows its weekday's template until it gets its own copy in `planned` (listed in `planDays`), which happens the first time you edit or fill in that day's plan. Template blocks have made-up `tpl:` ids until then.
 - **Money** is stored in integer cents. **Days** are local `YYYY-MM-DD` strings and **instants** are epoch milliseconds.
 - **Backups:** More › Back up my data gives you a JSON copy. Restore accepts the same JSON.
+
+## Credits
+
+Folder, list and tracker icons are from [Lucide](https://lucide.dev) (ISC licence).

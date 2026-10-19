@@ -103,7 +103,8 @@ export interface Bill {
 export interface TaskList {
   id: ID;
   name: string;
-  emoji?: string;
+  /** Icon name (see data/icons.ts). */
+  icon: string;
 }
 
 /** A folder in More. Task folders are the task lists in `lists`; every other kind lives in `folders`. */
@@ -112,7 +113,7 @@ export type FolderType = 'tracker' | 'check' | 'collect' | 'wish';
 export interface Folder {
   id: ID;
   name: string;
-  emoji: string;
+  icon: string;
   type: FolderType;
 }
 
@@ -126,7 +127,7 @@ export interface TrackerItem {
   id: ID;
   folderId: ID;
   name: string;
-  emoji: string;
+  icon: string;
   kind: 'since' | 'every';
   every?: { n: number; unit: RepeatUnit };
   /** For monthly repeats: due on this day of the month (1–31) instead of a month after last time. */

@@ -2,7 +2,8 @@
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
 import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry, TrackerItem } from './types';
-import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, defaultFolders, sampleData } from './seed';
+import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, LIST_ICON, defaultFolders, sampleData } from './seed';
+import { iconName } from './icons';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
 import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
 import { uid } from '../lib/id';
@@ -93,13 +94,19 @@ export function migrate(raw: unknown): AppData {
     milestones: arr(d.milestones, []),
     expenses,
     bills,
-    lists: arr(d.lists, base.lists),
+    // Folders, lists and trackers used to carry an emoji; they now carry an icon name.
+    lists: arr(d.lists, base.lists).map((l) => withIcon(l, LIST_ICON[l.id] ?? 'list-checks')),
     tasks: arr(d.tasks, []),
-    folders: arr(d.folders, defaultFolders()),
-    trackers: arr(d.trackers, []),
+    folders: arr(d.folders, defaultFolders()).map((f) => withIcon(f, 'folder')),
+    trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
     listItems: arr(d.listItems, []),
     settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) } },
   };
+}
+
+function withIcon<T extends { icon: string }>(x: T, fallback: string): T {
+  const { emoji, ...rest } = x as T & { emoji?: string };
+  return { ...rest, icon: iconName(x.icon ?? emoji, fallback) } as T;
 }
 
 export async function initStore(): Promise<void> {
@@ -400,9 +407,9 @@ export const actions = {
     update((d) => ({ ...d, tasks: remove(d.tasks, id) }));
     return before;
   },
-  addList(name: string, emoji?: string): ID {
+  addList(name: string, icon = 'list-checks'): ID {
     const id = uid();
-    update((d) => ({ ...d, lists: [...d.lists, { id, name, ...(emoji ? { emoji } : {}) }] }));
+    update((d) => ({ ...d, lists: [...d.lists, { id, name, icon }] }));
     return id;
   },
   /** Delete a task list and its tasks. Keeps at least one list. */

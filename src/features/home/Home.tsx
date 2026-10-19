@@ -7,6 +7,7 @@ import { fmtMoney, fmtMoneyShort } from '../../lib/money';
 import { go, moreView, showToast, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, CheckBox, Sticker } from '../../ui/kit';
 import { IconPlus, IconStop, Sakura } from '../../ui/icons';
+import { ThingIcon } from '../../ui/things';
 
 export function Home() {
   const data = useData();
@@ -66,10 +67,10 @@ export function Home() {
       <div className="content">
         {(dueRoutines.length > 0 || pinned.length > 0) && (
           <button type="button" className="card home-due" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>
-            {dueRoutines.length > 0 && <span><b>Due today</b> · {dueRoutines.map((d) => `${d.item.emoji} ${d.item.name}`).join(', ')}</span>}
+            {dueRoutines.length > 0 && <span><b>Due today</b> · {dueRoutines.map((d) => d.item.name).join(', ')}</span>}
             {pinned.map((t) => {
               const st = trackerStatus(t, today);
-              return <span key={t.id} className="muted">{t.emoji} {st.kind === 'since' ? `${st.days} ${st.days === 1 ? 'day' : 'days'} since ${t.name.toLowerCase()}` : st.daysLeft > 0 ? `${t.name} in ${st.daysLeft} ${st.daysLeft === 1 ? 'day' : 'days'}` : `${t.name} due`}</span>;
+              return <span key={t.id} className="muted due-line"><ThingIcon name={t.icon} size={16} />{st.kind === 'since' ? `${st.days} ${st.days === 1 ? 'day' : 'days'} since ${t.name.toLowerCase()}` : st.daysLeft > 0 ? `${t.name} in ${st.daysLeft} ${st.daysLeft === 1 ? 'day' : 'days'}` : `${t.name} due`}</span>;
             })}
           </button>
         )}

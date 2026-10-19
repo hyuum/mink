@@ -34,13 +34,13 @@ export const DRIFT_ID = 'drift';
 /** The folders a fresh install starts with in More, alongside the task lists. */
 export function defaultFolders(): Folder[] {
   return [
-    { id: 'habits', name: 'Habits', emoji: '🌱', type: 'tracker' },
-    { id: 'routines', name: 'Routines', emoji: '🧺', type: 'tracker' },
-    { id: 'groceries', name: 'Groceries', emoji: '🛒', type: 'check' },
+    { id: 'habits', name: 'Habits', icon: 'sprout', type: 'tracker' },
+    { id: 'routines', name: 'Routines', icon: 'calendar-check', type: 'tracker' },
+    { id: 'groceries', name: 'Groceries', icon: 'shopping-cart', type: 'check' },
   ];
 }
 
-export const LIST_EMOJI: Record<string, string> = { uni: '🎓', work: '💼', personal: '🌿', chores: '🧹' };
+export const LIST_ICON: Record<string, string> = { uni: 'graduation-cap', work: 'briefcase', personal: 'leaf', chores: 'brush' };
 
 /** Scrolling and video apps count as Drift; music, maps, calls and the camera don't count. Everything else is Drift too. */
 export function defaultPhoneSettings(): PhoneSettings {
@@ -77,10 +77,10 @@ export function defaultData(): AppData {
     expenses: [],
     bills: [],
     lists: [
-      { id: 'uni', name: 'Uni' },
-      { id: 'work', name: 'Work' },
-      { id: 'personal', name: 'Personal' },
-      { id: 'chores', name: 'Chores' },
+      { id: 'uni', name: 'Uni', icon: LIST_ICON.uni },
+      { id: 'work', name: 'Work', icon: LIST_ICON.work },
+      { id: 'personal', name: 'Personal', icon: LIST_ICON.personal },
+      { id: 'chores', name: 'Chores', icon: LIST_ICON.chores },
     ],
     tasks: [],
     folders: defaultFolders(),
@@ -200,24 +200,24 @@ export function sampleData(now: number = Date.now()): AppData {
     tasks,
     trackers: sampleTrackers(today),
     listItems: sampleListItems(now),
-    folders: [...defaultFolders(), { id: 'books', name: 'Books', emoji: '📚', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', emoji: '🎁', type: 'wish' }],
+    folders: [...defaultFolders(), { id: 'books', name: 'Books', icon: 'book-open', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', icon: 'gift', type: 'wish' }],
   };
 }
 
 function sampleTrackers(today: string): TrackerItem[] {
   const ago = (...ns: number[]) => ns.map((n) => addDays(today, -n)).sort();
-  const t = (folderId: string, name: string, emoji: string, kind: 'since' | 'every', hits: string[], extra: Partial<TrackerItem> = {}): TrackerItem =>
-    ({ id: uid(), folderId, name, emoji, kind, hits, since: addDays(today, -60), ...extra });
+  const t = (folderId: string, name: string, icon: string, kind: 'since' | 'every', hits: string[], extra: Partial<TrackerItem> = {}): TrackerItem =>
+    ({ id: uid(), folderId, name, icon, kind, hits, since: addDays(today, -60), ...extra });
   return [
-    t('habits', 'Doomscrolling past midnight', '📱', 'since', ago(12, 20, 23, 30, 41), { pinned: true }),
-    t('habits', 'Gym', '🏋️', 'every', ago(1, 3, 6, 8, 11, 14, 16, 19), { every: { n: 3, unit: 'day' } }),
-    t('habits', 'Bubble tea', '🧋', 'since', ago(4, 9, 15, 22)),
-    t('habits', 'Call home', '📞', 'every', ago(9, 17, 24), { every: { n: 1, unit: 'week' } }),
-    t('routines', 'Laundry', '👕', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' } }),
-    t('routines', 'Water plants', '🪴', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' } }),
-    t('routines', 'Change bedsheets', '🛏️', 'every', ago(10, 24), { every: { n: 2, unit: 'week' } }),
+    t('habits', 'Doomscrolling past midnight', 'smartphone', 'since', ago(12, 20, 23, 30, 41), { pinned: true }),
+    t('habits', 'Gym', 'dumbbell', 'every', ago(1, 3, 6, 8, 11, 14, 16, 19), { every: { n: 3, unit: 'day' } }),
+    t('habits', 'Bubble tea', 'cup-soda', 'since', ago(4, 9, 15, 22)),
+    t('habits', 'Call home', 'phone', 'every', ago(9, 17, 24), { every: { n: 1, unit: 'week' } }),
+    t('routines', 'Laundry', 'shirt', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' } }),
+    t('routines', 'Water plants', 'sprout', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' } }),
+    t('routines', 'Change bedsheets', 'bed-double', 'every', ago(10, 24), { every: { n: 2, unit: 'week' } }),
     // Rent was paid on the 1st of this month and last month.
-    t('routines', 'Pay rent', '💸', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1 }),
+    t('routines', 'Pay rent', 'banknote', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1 }),
   ];
 }
 

@@ -277,7 +277,7 @@ test('phone sessions become suggestions: ignored apps drop, short gaps join, log
 
 test('trackers: repeats come due, monthly ones can land on a set day, days-since counts up', async () => {
   const { repeatDue, trackerStatus, dueTrackers, addMonthsToDay } = await import('../src/data/logic.ts');
-  const base = { id: 'x', folderId: 'f', name: 'Laundry', emoji: '👕', since: '2026-09-01' };
+  const base = { id: 'x', folderId: 'f', name: 'Laundry', icon: 'shirt', since: '2026-09-01' };
   const weekly = { ...base, kind: 'every' as const, every: { n: 1, unit: 'week' as const }, hits: ['2026-10-12'] };
   assert.equal(repeatDue(weekly), '2026-10-19');
   const st = trackerStatus(weekly, '2026-10-21');
@@ -292,4 +292,19 @@ test('trackers: repeats come due, monthly ones can land on a set day, days-since
   const since = { ...base, name: 'Bubble tea', kind: 'since' as const, hits: ['2026-10-01', '2026-10-10'] };
   const s = trackerStatus(since, '2026-10-19');
   assert.ok(s.kind === 'since' && s.days === 9 && s.best === 30);
+});
+
+test('migrate swaps the emoji older saves used for icon names', () => {
+  const old = {
+    ...defaultData(),
+    lists: [{ id: 'uni', name: 'Uni' }, { id: 'x', name: 'Mine', emoji: '🎁' }],
+    folders: [{ id: 'f', name: 'Habits', emoji: '🌱', type: 'tracker' }, { id: 'g', name: 'Odd', emoji: '🦄', type: 'check' }],
+    trackers: [{ id: 't', folderId: 'f', name: 'Sheets', emoji: '🛏️', kind: 'since', hits: [], since: '2026-09-01' }],
+  };
+  const d = migrate(old);
+  assert.deepEqual(d.lists.map((l) => l.icon), ['graduation-cap', 'gift']);
+  assert.deepEqual(d.folders.map((f) => f.icon), ['sprout', 'folder']);
+  assert.equal(d.trackers[0].icon, 'bed-double');
+  assert.ok(!('emoji' in d.trackers[0]));
+  assert.equal(migrate(d).trackers[0].icon, 'bed-double');
 });
