@@ -318,3 +318,8 @@ test('a painted block can carry a name, and named blocks stay separate', () => {
   assert.deepEqual(e.map((x) => [x.label, x.start, x.end]), [['Gym', at(9), at(10)], ['', at(10), at(11)]]);
   assert.equal(hourLabel(26), '2 am');
 });
+
+test('older saves start with no day notes', () => {
+  const { notes: _n, ...old } = defaultData();
+  assert.deepEqual(migrate(old).notes, []);
+});

@@ -3,8 +3,8 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import type { AppData } from '../data/types';
 
 /* Route: a bare hash token, e.g. #money */
-export type Route = 'home' | 'time' | 'week' | 'stats' | 'money' | 'tasks' | 'more';
-const ROUTES: Route[] = ['home', 'time', 'week', 'stats', 'money', 'tasks', 'more'];
+export type Route = 'home' | 'time' | 'week' | 'stats' | 'journal' | 'money' | 'tasks' | 'more';
+const ROUTES: Route[] = ['home', 'time', 'week', 'stats', 'journal', 'money', 'tasks', 'more'];
 
 function readRoute(): Route {
   const h = location.hash.replace(/^#\/?/, '');

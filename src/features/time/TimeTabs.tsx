@@ -1,8 +1,8 @@
 import { go, type Route } from '../../app/ui-state';
 
-/** Day · Week · Stats switch in the Time band. */
-export function TimeTabs({ current }: { current: 'time' | 'week' | 'stats' }) {
-  const tabs: { route: Route; label: string }[] = [{ route: 'time', label: 'Day' }, { route: 'week', label: 'Week' }, { route: 'stats', label: 'Stats' }];
+/** Day · Week · Stats · Journal switch in the Time band. */
+export function TimeTabs({ current }: { current: 'time' | 'week' | 'stats' | 'journal' }) {
+  const tabs: { route: Route; label: string }[] = [{ route: 'time', label: 'Day' }, { route: 'week', label: 'Week' }, { route: 'stats', label: 'Stats' }, { route: 'journal', label: 'Journal' }];
   return (
     <div className="seg" role="tablist" aria-label="View">
       {tabs.map((t) => (

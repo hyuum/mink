@@ -192,6 +192,13 @@ export interface Settings {
   phone: PhoneSettings;
 }
 
+/** The note written at the end of a day. Days without one simply don't appear in the journal. */
+export interface DayNote {
+  day: Day;
+  text: string;
+  updatedAt: number;
+}
+
 export interface AppData {
   version: 2;
   /** True while the app is showing the example week instead of the person's own data. */
@@ -212,5 +219,6 @@ export interface AppData {
   folders: Folder[];
   trackers: TrackerItem[];
   listItems: ListItem[];
+  notes: DayNote[];
   settings: Settings;
 }

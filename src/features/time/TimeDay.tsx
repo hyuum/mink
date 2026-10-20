@@ -7,7 +7,7 @@ import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, run
 import { DRIFT_ID } from '../../data/seed';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
-import { showToast, timeDay, useNow } from '../../app/ui-state';
+import { go, showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
 import { IconEye, IconLabels, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { PhoneReview, usePhoneSuggestions } from './phone';
@@ -17,6 +17,7 @@ import { Dial } from './Dial';
 import { TimeTabs } from './TimeTabs';
 import { PlanControls } from './PlanControls';
 import { drawPenLines } from './doodles';
+import { NoteBox } from './Journal';
 
 const HOUR_PX = 52;
 const TOP_PAD = 12;
@@ -738,6 +739,11 @@ export function TimeDay() {
           </div>
         )}
 
+        {!planMode && (
+          <Card title="Note" action={data.notes.length ? <button className="card-link quiet" onClick={() => go('journal')}>Journal</button> : undefined}>
+            <NoteBox key={day} day={day} initial={data.notes.find((n) => n.day === day)?.text ?? ''} />
+          </Card>
+        )}
         {!planMode && totals.total > 0 && (
           <Card title={day === today ? 'Where today went' : 'Where the day went'} action={<button className="card-link quiet" onClick={() => setDial(!dial)} aria-pressed={dial}>{dial ? 'Bar' : 'Dial'}</button>}>
             {dial ? (

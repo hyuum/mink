@@ -100,6 +100,7 @@ export function migrate(raw: unknown): AppData {
     folders: arr(d.folders, defaultFolders()).map((f) => withIcon(f, 'folder')),
     trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
     listItems: arr(d.listItems, []),
+    notes: arr(d.notes, []),
     settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) } },
   };
 }
@@ -406,6 +407,13 @@ export const actions = {
     const before = state;
     update((d) => ({ ...d, tasks: remove(d.tasks, id) }));
     return before;
+  },
+  /** Saves a day's note; an empty note is removed so the day drops out of the journal. */
+  setNote(day: Day, text: string) {
+    update((d) => {
+      const rest = d.notes.filter((n) => n.day !== day);
+      return { ...d, notes: text.trim() ? [...rest, { day, text, updatedAt: Date.now() }] : rest };
+    });
   },
   addList(name: string, icon = 'list-checks'): ID {
     const id = uid();

@@ -5,14 +5,15 @@ import { BottomNav, ToastHost } from '../ui/kit';
 import { Home } from '../features/home/Home';
 import { TimeDay } from '../features/time/TimeDay';
 import { TimeSummary } from '../features/time/TimeSummary';
+import { Journal } from '../features/time/Journal';
 import { TimeWeek } from '../features/time/TimeWeek';
 import { Money } from '../features/money/Money';
 import { Tasks } from '../features/tasks/Tasks';
 import { More } from '../features/more/Hub';
 import { QuickAdd } from '../features/add/QuickAdd';
 
-const SCREENS = { home: Home, time: TimeDay, week: TimeWeek, stats: TimeSummary, money: Money, tasks: Tasks, more: More };
-const TITLES = { home: 'Home', time: 'Time', week: 'Week', stats: 'Time stats', money: 'Money', tasks: 'Tasks', more: 'More' };
+const SCREENS = { home: Home, time: TimeDay, week: TimeWeek, stats: TimeSummary, journal: Journal, money: Money, tasks: Tasks, more: More };
+const TITLES = { home: 'Home', time: 'Time', week: 'Week', stats: 'Time stats', journal: 'Journal', money: 'Money', tasks: 'Tasks', more: 'More' };
 
 /** Applies an explicit light/dark choice; "Match device" leaves the page alone. */
 function useTheme(theme: 'system' | 'light' | 'dark') {

@@ -86,6 +86,7 @@ export function defaultData(): AppData {
     folders: defaultFolders(),
     trackers: [],
     listItems: [],
+    notes: [],
     settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings() },
   };
 }
@@ -200,6 +201,11 @@ export function sampleData(now: number = Date.now()): AppData {
     tasks,
     trackers: sampleTrackers(today),
     listItems: sampleListItems(now),
+    notes: [
+      { day: addDays(today, -1), text: 'Lab took twice as long as planned. Ate lunch at my desk again. Good chat with Jess on the walk home though.', updatedAt: now },
+      { day: addDays(today, -2), text: 'Slow morning, too much scrolling. Readings finally done by 4.', updatedAt: now },
+      { day: addDays(today, -5), text: 'Market with Jess! Bought the matcha bowl I wanted. Early night.', updatedAt: now },
+    ],
     folders: [...defaultFolders(), { id: 'books', name: 'Books', icon: 'book-open', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', icon: 'gift', type: 'wish' }],
   };
 }

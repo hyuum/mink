@@ -141,7 +141,7 @@ export function Sticker({ kind, size = 30 }: { kind: StickerKind; size?: number 
 
 const NAV: { route: Route; label: string; icon: ReactNode; match: Route[] }[] = [
   { route: 'home', label: 'Home', icon: <IconHome />, match: ['home', 'tasks'] },
-  { route: 'time', label: 'Time', icon: <IconClock />, match: ['time', 'week', 'stats'] },
+  { route: 'time', label: 'Time', icon: <IconClock />, match: ['time', 'week', 'stats', 'journal'] },
   { route: 'money', label: 'Money', icon: <IconWallet />, match: ['money'] },
   { route: 'more', label: 'More', icon: <IconMore />, match: ['more'] },
 ];
@@ -159,7 +159,7 @@ export function BottomNav() {
       <div className="nav-inner">
         {link(NAV[0])}
         {link(NAV[1])}
-        <button type="button" className="add" aria-label="Quick add" onClick={() => openQuickAdd(route === 'money' ? 'spend' : route === 'time' || route === 'week' || route === 'stats' ? 'time' : route === 'tasks' ? 'task' : 'spend')}>
+        <button type="button" className="add" aria-label="Quick add" onClick={() => openQuickAdd(route === 'money' ? 'spend' : route === 'time' || route === 'week' || route === 'stats' || route === 'journal' ? 'time' : route === 'tasks' ? 'task' : 'spend')}>
           <IconPlus size={26} />
         </button>
         {link(NAV[2])}
