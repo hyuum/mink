@@ -114,12 +114,19 @@ public class BankNotesPlugin extends Plugin {
         call.resolve(result);
     }
 
-    /** Asks Android to reconnect the listener, which it sometimes drops after an update. */
+    /**
+     * Reads what's still in the notification shade again (after ticking a new app), or asks Android to
+     * reconnect the listener if it isn't running, which also reads the shade.
+     */
     @PluginMethod
     public void rebind(PluginCall call) {
-        try {
-            NotificationListenerService.requestRebind(new ComponentName(getContext(), BankListener.class));
-        } catch (Exception ignored) { }
+        BankListener live = BankListener.running;
+        if (live != null) live.scanActive();
+        else {
+            try {
+                NotificationListenerService.requestRebind(new ComponentName(getContext(), BankListener.class));
+            } catch (Exception ignored) { }
+        }
         call.resolve();
     }
 }

@@ -118,7 +118,7 @@ export function PhoneSettingsCard() {
     phoneSessions(Date.now() - 7 * 86_400_000, Date.now()).then(setWeek);
   }, [native, access]);
 
-  // Apps used in the last week, most used first.
+  // Apps used for an hour or more in the last week, most used first. Shorter ones would only clutter the list.
   const apps = useMemo(() => {
     const m = new Map<string, { pkg: string; label: string; min: number }>();
     for (const s of week) {
@@ -126,7 +126,7 @@ export function PhoneSettingsCard() {
       cur.min += (s.end - s.start) / 60_000;
       m.set(s.pkg, cur);
     }
-    return [...m.values()].sort((a, b) => b.min - a.min);
+    return [...m.values()].filter((a) => a.min >= 60).sort((a, b) => b.min - a.min);
   }, [week]);
 
   if (!native) {
@@ -173,7 +173,7 @@ export function PhoneSettingsCard() {
             {access && (
               <div className="stack" style={{ gap: 6 }}>
                 <p className="small muted">Your apps this week</p>
-                {apps.length === 0 && <p className="small muted">No app use recorded yet.</p>}
+                {apps.length === 0 && <p className="small muted">No app used for an hour or more this week.</p>}
                 {apps.map((a) => (
                   <div key={a.pkg} className="row phone-app">
                     <div className="grow" style={{ minWidth: 0 }}>

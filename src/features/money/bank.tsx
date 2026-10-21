@@ -19,7 +19,8 @@ function useBankNotes(on: boolean): BankNote[] {
   useEffect(() => {
     if (!on) { setNotes([]); return; }
     let live = true;
-    const load = () => { bankNotes(Date.now() - KEEP_MS).then((n) => { if (live) setNotes(n); }); };
+    // Pick up anything still in the notification shade first, then read what's kept.
+    const load = () => { rebindBank().then(() => bankNotes(Date.now() - KEEP_MS)).then((n) => { if (live) setNotes(n); }); };
     load();
     const onShow = () => { if (document.visibilityState === 'visible') load(); };
     document.addEventListener('visibilitychange', onShow);
@@ -144,7 +145,11 @@ export function BankSettingsCard() {
     return () => document.removeEventListener('visibilitychange', onShow);
   }, [native]);
   // Keep the Android side's list of apps in step with settings (it only keeps notifications from these).
-  useEffect(() => { if (native) setBankApps(b.enabled ? b.apps : []); }, [native, b.enabled, b.apps]);
+  // A newly ticked app's notifications still in the shade are picked up straight away.
+  useEffect(() => {
+    if (!native) return;
+    setBankApps(b.enabled ? b.apps : []).then(() => rebindBank()).then(() => bankSeenApps()).then((a) => setSeen(a.sort((x, y) => y.count - x.count)));
+  }, [native, b.enabled, b.apps]);
 
   if (!native) {
     return (
@@ -160,7 +165,7 @@ export function BankSettingsCard() {
     <Card title="Bank notifications">
       <div className="stack">
         <label className="row" htmlFor="bank-on" style={{ minHeight: 44, gap: 10, fontSize: 15 }}>
-          <input id="bank-on" type="checkbox" checked={b.enabled} onChange={(e) => { actions.updateBankSettings({ enabled: e.target.checked }); if (e.target.checked) rebindBank(); }} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />
+          <input id="bank-on" type="checkbox" checked={b.enabled} onChange={(e) => actions.updateBankSettings({ enabled: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />
           Suggest spends from notifications
         </label>
         {b.enabled && access === false && (

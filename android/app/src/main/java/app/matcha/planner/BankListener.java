@@ -32,6 +32,33 @@ public class BankListener extends NotificationListenerService {
     static final int MAX_ITEMS = 400;
     private static final Pattern AMOUNT = Pattern.compile("(A?\\$|AUD)\\s?\\d");
 
+    /**
+     * Android keeps no history apps can read, but notifications still in the shade can be: read them
+     * when access is turned on, and again whenever the app asks (after you tick a new app).
+     */
+    @Override
+    public void onListenerConnected() {
+        running = this;
+        scanActive();
+    }
+
+    @Override
+    public void onListenerDisconnected() {
+        if (running == this) running = null;
+    }
+
+    /** The connected listener, so the app can ask for a fresh read of the shade. */
+    static volatile BankListener running;
+
+    void scanActive() {
+        try {
+            StatusBarNotification[] active = getActiveNotifications();
+            if (active != null) for (StatusBarNotification sbn : active) onNotificationPosted(sbn);
+        } catch (Exception ignored) {
+            // Nothing to pick up.
+        }
+    }
+
     @Override
     public void onNotificationPosted(StatusBarNotification sbn) {
         try {
@@ -60,8 +87,11 @@ public class BankListener extends NotificationListenerService {
         JSONObject seen = new JSONObject(prefs.getString(SEEN, "{}"));
         JSONObject app = seen.optJSONObject(pkg);
         if (app == null) { app = new JSONObject(); app.put("label", label(ctx, pkg)); app.put("count", 0); }
-        app.put("count", app.optInt("count") + 1);
-        app.put("last", postedAt);
+        // Reading the shade again sees the same notifications: only newer ones add to the count.
+        if (postedAt > app.optLong("last")) {
+            app.put("count", app.optInt("count") + 1);
+            app.put("last", postedAt);
+        }
         seen.put(pkg, app);
         edit.putString(SEEN, seen.toString());
 
