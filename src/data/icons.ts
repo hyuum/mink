@@ -49,6 +49,12 @@ export const ICON_PATHS: Record<string, string> = {
   'calendar-check': '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/><path d="m9 16 2 2 4-4"/>',
   'moon': '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>',
   'flame': '<path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z"/>',
+  'users': '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+  'user': '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+  'message-circle': '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  'cake': '<path d="M20 21v-8a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8"/><path d="M4 16s.5-1 2-1 2.5 2 4 2 2.5-2 4-2 2.5 2 4 2 2-1 2-1"/><path d="M2 21h20"/><path d="M7 8v3"/><path d="M12 8v3"/><path d="M17 8v3"/><path d="M7 4h.01"/><path d="M12 4h.01"/><path d="M17 4h.01"/>',
+  'shower-head': '<path d="m4 4 2.5 2.5"/><path d="M13.5 6.5a4.95 4.95 0 0 0-7 7"/><path d="M15 5 5 15"/><path d="M14 17v.01"/><path d="M10 16v.01"/><path d="M13 13v.01"/><path d="M16 10v.01"/><path d="M11 20v.01"/><path d="M17 14v.01"/><path d="M20 11v.01"/>',
+  'refrigerator': '<path d="M5 6a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6Z"/><path d="M5 10h14"/><path d="M15 7v6"/>',
 };
 
 /** The emoji earlier versions offered, and the icon each one becomes. */
@@ -66,7 +72,8 @@ export function iconName(v: string | undefined, fallback = 'list-checks'): strin
   return (e && FROM_EMOJI[e]) || fallback;
 }
 
-export const TRACKER_ICONS = ['sparkles', 'shirt', 'washing-machine', 'sprout', 'brush', 'bed-double', 'bath', 'banknote', 'pill', 'dumbbell', 'footprints', 'bike',
-  'smartphone', 'cup-soda', 'coffee', 'wine', 'cigarette', 'phone', 'heart', 'droplets', 'scissors', 'car', 'utensils', 'moon'];
-export const FOLDER_ICONS = ['folder', 'list-checks', 'sprout', 'calendar-check', 'house', 'shopping-cart', 'book-open', 'gift', 'soup', 'apple', 'clapperboard', 'plane',
+export const TRACKER_ICONS = ['sparkles', 'user', 'users', 'message-circle', 'phone', 'cake', 'heart', 'shirt', 'washing-machine', 'sprout', 'brush', 'droplets',
+  'shower-head', 'refrigerator', 'bed-double', 'bath', 'banknote', 'pill', 'dumbbell', 'footprints', 'bike', 'smartphone', 'cup-soda', 'coffee', 'wine',
+  'cigarette', 'scissors', 'car', 'utensils', 'moon'];
+export const FOLDER_ICONS = ['folder', 'list-checks', 'users', 'message-circle', 'sprout', 'calendar-check', 'house', 'shopping-cart', 'book-open', 'gift', 'soup', 'apple', 'clapperboard', 'plane',
   'paw-print', 'music', 'graduation-cap', 'briefcase', 'leaf', 'heart', 'star', 'flame'];

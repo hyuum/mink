@@ -366,9 +366,6 @@ a.btn { text-decoration: none; }
 .midnight span { position: absolute; right: 0; top: -9px; padding: 1px 6px; border-radius: 8px; background: var(--card); color: var(--ink); font-size: 10.5px; font-weight: 700; }
 .sleep-marker.carried::after { opacity: .45; }
 .sleep-marker.carried .sm-tab { border-style: dashed; color: var(--muted); font-weight: 400; box-shadow: none; cursor: pointer; }
-.name-sugs { display: flex; flex-wrap: wrap; gap: 6px; }
-.name-sug { border: 1.5px dashed var(--line); background: none; color: var(--ink); border-radius: 16px; min-height: 34px; padding: 0 12px; font-size: 13px; }
-.name-sug span { color: var(--muted); }
 .act-chip.hit { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
 .act-chip.dim { opacity: .4; }
 .tblock.plan { background: color-mix(in srgb, var(--c) 24%, var(--card)); border: 2px dashed color-mix(in srgb, var(--c) 72%, var(--ink)); }
@@ -594,3 +591,14 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .jnum { font-family: var(--font-display); font-size: 24px; line-height: 1; }
 .jday { font-size: 13px; color: var(--muted); }
 .jtext { margin: 0; font-size: 15px; line-height: 1.55; white-space: pre-wrap; overflow-wrap: anywhere; cursor: text; }
+
+/* Swipe a tracked thing sideways to mark it done */
+.tswipe { position: relative; overflow: hidden; }
+.tswipe .trow { position: relative; z-index: 1; background: var(--card); touch-action: pan-y; transition: transform .25s ease-out; }
+.tswipe .trow.dragging { transition: none; }
+.tback { position: absolute; inset: 0; display: flex; align-items: center; gap: 6px; padding: 0 22px; background: color-mix(in srgb, var(--done) 30%, var(--card)); color: var(--green-strong); font-size: 14px; font-weight: 700; }
+.tswipe.left .tback { justify-content: flex-end; }
+.tswipe.ready .tback { background: var(--done); color: var(--done-ink); }
+.trow .tick { color: var(--green-strong); flex: none; display: grid; place-items: center; }
+.more-opts { display: block; margin: -6px auto 8px; }
+@media (prefers-reduced-motion: reduce) { .tswipe .trow { transition: none; } }

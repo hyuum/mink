@@ -206,7 +206,7 @@ export function sampleData(now: number = Date.now()): AppData {
       { day: addDays(today, -2), text: 'Slow morning, too much scrolling. Readings finally done by 4.', updatedAt: now },
       { day: addDays(today, -5), text: 'Market with Jess! Bought the matcha bowl I wanted. Early night.', updatedAt: now },
     ],
-    folders: [...defaultFolders(), { id: 'books', name: 'Books', icon: 'book-open', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', icon: 'gift', type: 'wish' }],
+    folders: [...defaultFolders(), { id: 'friends', name: 'Friends', icon: 'users', type: 'tracker' }, { id: 'books', name: 'Books', icon: 'book-open', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', icon: 'gift', type: 'wish' }],
   };
 }
 
@@ -222,6 +222,12 @@ function sampleTrackers(today: string): TrackerItem[] {
     t('routines', 'Laundry', 'shirt', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' } }),
     t('routines', 'Water plants', 'sprout', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' } }),
     t('routines', 'Change bedsheets', 'bed-double', 'every', ago(10, 24), { every: { n: 2, unit: 'week' } }),
+    t('routines', 'Clean the drain', 'droplets', 'since', ago(47)),
+    t('routines', 'Defrost the freezer', 'refrigerator', 'since', ago(80)),
+    t('friends', 'Mum', 'phone', 'since', ago(9, 16, 25)),
+    t('friends', 'Jess', 'message-circle', 'since', ago(2, 5, 12)),
+    t('friends', 'Sam', 'message-circle', 'since', ago(23)),
+    t('friends', 'Grandma', 'phone', 'since', ago(40)),
     // Rent was paid on the 1st of this month and last month.
     t('routines', 'Pay rent', 'banknote', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1 }),
   ];

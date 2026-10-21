@@ -454,6 +454,15 @@ export const actions = {
     return before;
   },
   /** Mark a tracker as done (or as having happened) on a day. Returns the earlier snapshot for Undo. */
+  /** Sets when it last happened: later times are dropped, and the start moves back if needed. */
+  setTrackerLast(id: ID, day: string): AppData {
+    const before = state;
+    update((d) => ({
+      ...d,
+      trackers: d.trackers.map((t) => (t.id === id ? { ...t, hits: [...t.hits.filter((h) => h < day), day], since: t.since < day ? t.since : day } : t)),
+    }));
+    return before;
+  },
   hitTracker(id: ID, day: string): AppData {
     const before = state;
     update((d) => ({ ...d, trackers: d.trackers.map((t) => (t.id === id && !t.hits.includes(day) ? { ...t, hits: [...t.hits, day].sort() } : t)) }));

@@ -804,10 +804,7 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
   const [text, setText] = useState('');
   const ordered = [...recent.map((id) => cats.find((c) => c.id === id)).filter((c): c is TimeCategory => Boolean(c)), ...cats.filter((c) => !recent.includes(c.id))];
   const q = text.trim().toLowerCase();
-  // What you've typed suggests names you've used before, and the activity it most likely is.
-  const matches = q
-    ? names.filter((n) => n.label.toLowerCase().includes(q)).sort((a, b) => Number(!a.label.toLowerCase().startsWith(q)) - Number(!b.label.toLowerCase().startsWith(q)))
-    : names;
+  // What you've typed highlights the activity it most likely is: one you've used that name for, or a likely match.
   const guess = q.length < 2 ? undefined
     : names.find((n) => n.label.toLowerCase().startsWith(q))?.categoryId
       ?? cats.find((c) => c.name.toLowerCase().startsWith(q))?.id
@@ -823,18 +820,9 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
         <p className="small muted">{pick.sub}</p>
       </div>
       {pick.naming && (
-        <form className="stack" style={{ gap: 8 }} onSubmit={submit}>
+        <form onSubmit={submit}>
           <input className="field-input" id="pick-name" aria-label="What was it? (optional)" placeholder="What was it? (optional)" autoComplete="off" enterKeyHint="done"
             value={text} onChange={(e) => setText(e.target.value)} />
-          {matches.length > 0 && (
-            <div className="name-sugs">
-              {matches.slice(0, 3).map((n) => (
-                <button key={n.label} type="button" className="name-sug" onClick={() => choose(n.categoryId, n.label)}>
-                  {n.label} <span>· {cats.find((c) => c.id === n.categoryId)?.name}</span>
-                </button>
-              ))}
-            </div>
-          )}
         </form>
       )}
       <div className="act-grid">

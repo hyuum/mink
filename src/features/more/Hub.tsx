@@ -1,13 +1,14 @@
 // More: a notes-style list of folders (task lists, trackers, checklists, collections, wishlists),
 // what's due today across them, and the way into Settings.
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent, type PointerEvent } from 'react';
 import { actions, useData } from '../../data/store';
 import { dueTrackers, trackerStatus } from '../../data/logic';
 import type { Folder, FolderType, ID, ListItem, RepeatUnit, TrackerItem } from '../../data/types';
-import { addDays, todayISO } from '../../lib/dates';
+import { addDays, fmtDayShort, todayISO } from '../../lib/dates';
 import { fmtMoney, parseAmount } from '../../lib/money';
 import { go, moreView, showToast, taskListFilter, useNow } from '../../app/ui-state';
 import { Band, Sheet } from '../../ui/kit';
+import { IconCheck } from '../../ui/icons';
 import { FOLDER_ICONS, TRACKER_ICONS } from '../../data/icons';
 import { IconChoice, ThingIcon } from '../../ui/things';
 import { Settings } from './More';
@@ -121,45 +122,88 @@ function Hub() {
 
 /* ---------- Trackers ---------- */
 
+/** How far a row has to be swiped (either way) to mark it done. */
+const SWIPE_DONE = 90;
+
+/**
+ * One tracked thing. Swipe it sideways to mark it done today: a "days since" count goes back to 0,
+ * a repeat moves on to its next due date. Tap it for the last 30 days and its options.
+ */
 function TrackerRow({ t, today }: { t: TrackerItem; today: string }) {
   const [open, setOpen] = useState(false);
+  const [dx, setDx] = useState(0);
+  const drag = useRef<{ x: number; y: number; on: boolean } | null>(null);
+  const swiped = useRef(false);
   const s = trackerStatus(t, today);
+  const doneToday = t.hits.includes(today);
   const hit = () => {
     const before = actions.hitTracker(t.id, today);
-    if (s.kind === 'since') showToast(`Reset after ${plural(s.days, 'day')}`, before);
+    try { navigator.vibrate?.(12); } catch { /* not supported */ }
+    if (s.kind === 'since') showToast(`${t.name} · back to 0 after ${plural(s.days, 'day')}`, before);
     else {
       const next = trackerStatus({ ...t, hits: [...t.hits, today].sort() }, today);
       showToast(`${t.name} done${next.kind === 'every' ? ` · next ${next.daysLeft === 1 ? 'tomorrow' : `in ${plural(next.daysLeft, 'day')}`}` : ''}`, before);
     }
   };
+  const onDown = (e: PointerEvent<HTMLDivElement>) => { if (e.button === 0) drag.current = { x: e.clientX, y: e.clientY, on: false }; };
+  const onMove = (e: PointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d) return;
+    const mx = e.clientX - d.x, my = e.clientY - d.y;
+    if (!d.on) {
+      if (Math.abs(my) > 10 && Math.abs(my) > Math.abs(mx)) { drag.current = null; return; }
+      if (Math.abs(mx) < 10) return;
+      d.on = true;
+      e.currentTarget.setPointerCapture(e.pointerId);
+    }
+    // Past the line it gets heavier, so it's clear letting go will count.
+    const pull = Math.abs(mx) > SWIPE_DONE ? Math.sign(mx) * (SWIPE_DONE + (Math.abs(mx) - SWIPE_DONE) * 0.35) : mx;
+    setDx(doneToday ? mx * 0.25 : pull);
+  };
+  const onUp = () => {
+    const d = drag.current;
+    drag.current = null;
+    if (!d?.on) return;
+    swiped.current = true;
+    if (Math.abs(dx) >= SWIPE_DONE && !doneToday) hit();
+    setDx(0);
+  };
   const due = dueText(t, today);
+  const last = t.hits.length ? t.hits[t.hits.length - 1] : null;
   const days = Array.from({ length: 30 }, (_, i) => addDays(today, i - 29));
+  const ready = Math.abs(dx) >= SWIPE_DONE;
   return (
     <div className="tgroup">
-      <div className="trow">
-        <span className="ticon"><ThingIcon name={t.icon} size={22} /></span>
-        <button type="button" className="main" aria-expanded={open} onClick={() => setOpen(!open)}>
-          <b>{t.name}</b>
-          {s.kind === 'since'
-            ? <small>Best run {plural(s.best, 'day')}</small>
-            : <small className={due.tone}>{due.text}</small>}
-        </button>
-        {s.kind === 'since' ? (
-          <>
-            <span className="big">{s.days}<small>days</small></span>
-            <button type="button" className="act" onClick={hit} disabled={t.hits.includes(today)}>It happened</button>
-          </>
-        ) : s.doneToday
-          ? <button type="button" className="act" disabled>Done ✓</button>
-          : <button type="button" className="act do" onClick={hit}>Done</button>}
+      <div className={`tswipe ${dx > 0 ? 'right' : dx < 0 ? 'left' : ''} ${ready ? 'ready' : ''}`}>
+        <div className="tback" aria-hidden="true">{doneToday ? 'Done today' : <><IconCheck size={18} />Done</>}</div>
+        <div
+          className={`trow ${dx ? 'dragging' : ''}`} style={{ transform: dx ? `translateX(${dx}px)` : undefined }}
+          onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={() => { drag.current = null; setDx(0); }}
+        >
+          <span className="ticon"><ThingIcon name={t.icon} size={22} /></span>
+          <button type="button" className="main" aria-expanded={open} onClick={() => { if (swiped.current) { swiped.current = false; return; } setOpen(!open); }}>
+            <b>{t.name}</b>
+            {s.kind === 'since'
+              ? <small className={doneToday ? 'today' : ''}>{doneToday ? 'Today' : last ? `Last time ${fmtDayShort(last)}` : 'Not yet'}</small>
+              : <small className={due.tone}>{due.text}</small>}
+          </button>
+          {s.kind === 'since' && <span className="big">{s.days}<small>{s.days === 1 ? 'day' : 'days'}</small></span>}
+          {s.kind === 'every' && doneToday && <span className="tick" aria-label="Done today"><IconCheck size={18} /></span>}
+        </div>
       </div>
       {open && (
         <div className="detail">
           <div className="dots" aria-label="Last 30 days">
-            {days.map((d) => <span key={d} className={t.hits.includes(d) ? `hit ${t.kind === 'since' ? 'since' : ''}` : ''} title={d} />)}
+            {days.map((d) => <span key={d} className={t.hits.includes(d) ? 'hit' : ''} title={d} />)}
           </div>
-          <p className="small muted">Last 30 days · {s.kind === 'every' ? `streak ${s.streak} · ${everyText(t)}` : `${plural(t.hits.length, 'time')} in all`}</p>
+          <p className="small muted">Last 30 days · {s.kind === 'every' ? `streak ${s.streak} · ${everyText(t)}` : `${plural(t.hits.length, 'time')} in all · longest gap ${plural(s.best, 'day')}`}</p>
+          <label className="row small" htmlFor={`last-${t.id}`} style={{ gap: 8 }}>
+            Last time
+            <input id={`last-${t.id}`} type="date" className="field-input auto" max={today} value={last ?? ''}
+              onChange={(e) => { if (e.target.value) { const before = actions.setTrackerLast(t.id, e.target.value); showToast('Last time changed', before); } }} />
+          </label>
           <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+            <button type="button" className="act do" disabled={doneToday} onClick={hit}>{doneToday ? 'Done today' : 'Mark done today'}</button>
             <button type="button" className="act" onClick={() => actions.updateTracker(t.id, { pinned: !t.pinned })}>{t.pinned ? '★ Unpin from Home' : '☆ Pin to Home'}</button>
             <button type="button" className="act" onClick={() => { const before = actions.deleteTracker(t.id); showToast(`Deleted ${t.name}`, before); }}>Delete</button>
           </div>
@@ -169,18 +213,19 @@ function TrackerRow({ t, today }: { t: TrackerItem; today: string }) {
   );
 }
 
-function AddTrackerSheet({ folderId, open, onClose }: { folderId: ID; open: boolean; onClose: () => void }) {
-  const [name, setName] = useState('');
-  const [kind, setKind] = useState<'every' | 'since'>('every');
+function AddTrackerSheet({ folderId, open, onClose, initialKind, initialName = '', initialIcon }: { folderId: ID; open: boolean; onClose: () => void; initialKind: 'every' | 'since'; initialName?: string; initialIcon?: string }) {
+  const [name, setName] = useState(initialName);
+  const [kind, setKind] = useState<'every' | 'since'>(initialKind);
+  const [last, setLast] = useState('');
   const [n, setN] = useState(1);
   const [unit, setUnit] = useState<RepeatUnit>('week');
   const [onDay, setOnDay] = useState(0);
-  const [icon, setIcon] = useState(TRACKER_ICONS[0]);
+  const [icon, setIcon] = useState(initialIcon && TRACKER_ICONS.includes(initialIcon) ? initialIcon : TRACKER_ICONS[0]);
   const today = todayISO();
   const save = (e: FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
-    actions.addTracker({ folderId, name: name.trim(), icon, kind, hits: [], since: today, ...(kind === 'every' ? { every: { n, unit }, ...(unit === 'month' && onDay ? { onDay } : {}) } : {}) });
+    actions.addTracker({ folderId, name: name.trim(), icon, kind, hits: last ? [last] : [], since: last && last < today ? last : today, ...(kind === 'every' ? { every: { n, unit }, ...(unit === 'month' && onDay ? { onDay } : {}) } : {}) });
     showToast(`Added ${name.trim()}`);
     setName(''); onClose();
   };
@@ -188,10 +233,10 @@ function AddTrackerSheet({ folderId, open, onClose }: { folderId: ID; open: bool
     <Sheet open={open} onClose={onClose} label="Add to tracker">
       <form className="stack" style={{ gap: 12 }} onSubmit={save}>
         <h2>Add</h2>
-        <input className="field-input" aria-label="Name" placeholder="e.g. Vacuum, Pay rent, Skip breakfast" value={name} onChange={(e) => setName(e.target.value)} />
+        <input className="field-input" aria-label="Name" placeholder="e.g. Call Mum, Clean the drain, Pay rent" value={name} onChange={(e) => setName(e.target.value)} />
         <div className="types">
-          <button type="button" className="type" aria-pressed={kind === 'every'} onClick={() => setKind('every')}><b>Repeats</b><small>Shows when it's due. Chores, habits to keep up</small></button>
-          <button type="button" className="type" aria-pressed={kind === 'since'} onClick={() => setKind('since')}><b>Days since</b><small>Counts up. Habits to avoid</small></button>
+          <button type="button" className="type" aria-pressed={kind === 'every'} onClick={() => setKind('every')}><b>Repeats</b><small>Shows when it's due: weekly chores, rent</small></button>
+          <button type="button" className="type" aria-pressed={kind === 'since'} onClick={() => setKind('since')}><b>Days since</b><small>Counts up until you do it again: friends, odd jobs, habits</small></button>
         </div>
         {kind === 'every' && (
           <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -208,6 +253,11 @@ function AddTrackerSheet({ folderId, open, onClose }: { folderId: ID; open: bool
             )}
           </div>
         )}
+        <label className="row small" htmlFor="tracker-last" style={{ gap: 8 }}>
+          Last time
+          <input id="tracker-last" type="date" className="field-input auto" max={today} value={last} onChange={(e) => setLast(e.target.value)} />
+          {!last && <span className="muted">not yet</span>}
+        </label>
         <IconChoice icons={TRACKER_ICONS} value={icon} onPick={setIcon} />
         <div className="row" style={{ gap: 8 }}>
           <button type="button" className="btn ghost" onClick={onClose}>Cancel</button>
@@ -244,9 +294,22 @@ function FolderView({ id }: { id: ID }) {
   const sorted = [...trackers].sort((a, b) => {
     const sa = trackerStatus(a, today), sb = trackerStatus(b, today);
     if (sa.kind !== sb.kind) return sa.kind === 'every' ? -1 : 1;
-    return sa.kind === 'every' && sb.kind === 'every' ? sa.daysLeft - sb.daysLeft : 0;
+    if (sa.kind === 'every' && sb.kind === 'every') return sa.daysLeft - sb.daysLeft;
+    return sa.kind === 'since' && sb.kind === 'since' ? sb.days - sa.days : 0;
   });
   const total = items.reduce((t, i) => t + (i.price ?? 0), 0);
+  // New things start as whatever the folder mostly holds, so a list of friends keeps adding "days since".
+  const folderKind: 'every' | 'since' = trackers.filter((t) => t.kind === 'since').length > trackers.length / 2 ? 'since' : 'every';
+  const itemIcon = trackers[trackers.length - 1]?.icon ?? folder.icon;
+  // In a "days since" folder, typing a name and Add is all it takes; repeats need their interval, so they open the sheet.
+  const quickAdd = (e: FormEvent) => {
+    e.preventDefault();
+    const v = text.trim();
+    if (!v) return;
+    if (folderKind === 'every') { setAdding(true); return; }
+    actions.addTracker({ folderId: id, name: v, icon: itemIcon, kind: 'since', hits: [], since: today });
+    setText('');
+  };
 
   return (
     <>
@@ -269,7 +332,11 @@ function FolderView({ id }: { id: ID }) {
             <>
               {sorted.map((t) => <TrackerRow key={t.id} t={t} today={today} />)}
               {!sorted.length && <p className="small muted" style={{ padding: 16 }}>Nothing here yet.</p>}
-              <div className="add-row"><button type="button" className="btn green block" onClick={() => setAdding(true)}>+ Add</button></div>
+              <form className="add-row" onSubmit={quickAdd}>
+                <input className="field-input dashed grow" aria-label="New item" value={text} onChange={(e) => setText(e.target.value)} placeholder={folderKind === 'since' ? 'Add, e.g. Call Mum' : 'Add, e.g. Laundry'} />
+                <button type="submit" className="btn green">Add</button>
+              </form>
+              <button type="button" className="card-link more-opts" onClick={() => setAdding(true)}>{folderKind === 'since' ? 'Add with a repeat or a date…' : 'More options…'}</button>
             </>
           )}
           {folder.type !== 'tracker' && (
@@ -284,7 +351,9 @@ function FolderView({ id }: { id: ID }) {
           )}
         </div>
       </div>
-      {folder.type === 'tracker' && <AddTrackerSheet folderId={id} open={adding} onClose={() => setAdding(false)} />}
+      {folder.type === 'tracker' && adding && (
+        <AddTrackerSheet folderId={id} open onClose={() => { setAdding(false); setText(''); }} initialKind={folderKind} initialName={text.trim()} initialIcon={itemIcon} />
+      )}
       <FolderOptions folder={folder} open={editing} onClose={() => setEditing(false)} />
     </>
   );
