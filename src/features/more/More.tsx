@@ -17,7 +17,18 @@ const STORAGE_TEXT = {
 };
 
 /** Settings: display, activities, phone tracking and your data. Opened from the More hub. */
-export function Settings() {
+export type SettingsPage = 'display' | 'time' | 'spend' | 'app';
+
+/** The settings pages, as listed in More. */
+export const SETTINGS_PAGES: { page: SettingsPage; title: string; desc: string }[] = [
+  { page: 'display', title: 'Display', desc: 'Light or dark, and the hours your day view shows' },
+  { page: 'time', title: 'Time tracking', desc: 'Activities you log time as, and time from phone use' },
+  { page: 'spend', title: 'Spend tracking', desc: 'Spends from your bank’s notifications' },
+  { page: 'app', title: 'App and data', desc: 'Back up, restore or start fresh, and app updates' },
+];
+
+/** One settings page; each opens on its own from the list in More. */
+export function Settings({ page }: { page: SettingsPage }) {
   const data = useData();
   const s = data.settings;
   const [backup, setBackup] = useState<string | null>(null);
@@ -59,11 +70,11 @@ export function Settings() {
     <>
       <Band>
         <button type="button" className="backlink" onClick={() => moreView.set({ kind: 'hub' })}>‹ More</button>
-        <h1>Settings</h1>
+        <h1>{SETTINGS_PAGES.find((p) => p.page === page)?.title ?? 'Settings'}</h1>
       </Band>
 
       <div className="content two">
-        <Card title="Display" id="set-display">
+        {page === 'display' && <Card title="Look and day hours">
           <div className="stack" style={{ gap: 12 }}>
             <p className="label">Theme</p>
             <ChipGroup label="Theme" value={s.theme} onChange={(theme) => actions.updateSettings({ theme })} options={[{ value: 'system', label: 'Match device' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
@@ -71,20 +82,11 @@ export function Settings() {
             <ChipGroup<string> label="Timeline start" value={String(s.dayStartHour)} onChange={(v) => actions.updateSettings({ dayStartHour: Number(v) })} options={[6, 7, 8, 9].map((h) => ({ value: String(h), label: `${h} am` }))} />
             <p className="label">Timeline ends at</p>
             <ChipGroup<string> label="Timeline end" value={String(s.dayEndHour)} onChange={(v) => actions.updateSettings({ dayEndHour: Number(v) })} options={[20, 21, 22, 23].map((h) => ({ value: String(h), label: `${h - 12} pm` }))} />
-            <label className="field" htmlFor="goal">Daily time goal
-              <select id="goal" value={s.dailyGoalMin} onChange={(e) => actions.updateSettings({ dailyGoalMin: Number(e.target.value) })}>
-                <option value={0}>No goal</option>
-                {[2, 3, 4, 5, 6, 7, 8].map((h) => <option key={h} value={h * 60}>{h} hours</option>)}
-              </select>
-            </label>
-            <label className="row" htmlFor="stickers" style={{ minHeight: 44, gap: 10, fontSize: 15 }}>
-              <input id="stickers" type="checkbox" checked={s.stickers} onChange={(e) => actions.updateSettings({ stickers: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />
-              Show stickers on Home
-            </label>
+            <p className="small muted">The day view stretches past these when you woke earlier or went to bed later.</p>
           </div>
-        </Card>
+        </Card>}
 
-        <Card title="Time categories" id="set-activities">
+        {page === 'time' && <><Card title="Activities">
           <div className="stack">
             <p className="small muted">Tap a colour dot to change it. The arrow button draws an activity as a thin arrow on the day, like travel.</p>
             {data.timeCategories.map((c) => <CategoryRow key={c.id} c={c} all={data.timeCategories} />)}
@@ -93,14 +95,16 @@ export function Settings() {
               <input id="new-tc" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="New category" className="grow" style={{ minHeight: 40, border: '1.5px dashed var(--line)', borderRadius: 10, padding: '0 10px', background: 'transparent', color: 'var(--ink)', fontSize: 15 }} />
               <button className="btn" type="submit">Add</button>
             </form>
-            <p className="small muted">The weekly allowance is set on the Money screen (tap the allowance under the total).</p>
           </div>
         </Card>
+        <PhoneSettingsCard /></>}
 
-        <div id="set-phone"><PhoneSettingsCard /></div>
-        <div id="set-bank"><BankSettingsCard /></div>
+        {page === 'spend' && <>
+          <BankSettingsCard />
+          <p className="small muted">Your weekly allowance is set on Money (tap the allowance under the total).</p>
+        </>}
 
-        <Card title="Your data" id="set-data">
+        {page === 'app' && <><Card title="Backup and reset">
           <div className="stack">
             <p style={{ fontSize: 14 }}>{STORAGE_TEXT[storageKind]}</p>
             {backup === null ? (
@@ -145,7 +149,7 @@ export function Settings() {
           </div>
         </Card>
         <AndroidAppCard />
-        <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p>
+        <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p></>}
       </div>
     </>
   );

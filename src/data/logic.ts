@@ -1,7 +1,7 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
 import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Priority, SpendKind, Task, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
-import { DRIFT_ID, MILESTONE_KINDS } from './seed';
+import { MILESTONE_KINDS } from './seed';
 
 /* ---------- Time ---------- */
 
@@ -541,28 +541,6 @@ export function allTags(tasks: Task[]): string[] {
   const count = new Map<string, number>();
   for (const t of tasks) for (const tag of t.tags) count.set(tag, (count.get(tag) ?? 0) + 1);
   return [...count.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([t]) => t);
-}
-
-/* ---------- Stickers ---------- */
-
-export type StickerKind = 'flower' | 'leaf' | 'heart' | 'star';
-
-/** One sticker per finished block of 25+ minutes (Drift doesn't count) and one per finished task, this week (Mon–Sun). */
-export function stickersThisWeek(data: AppData, today: Day): StickerKind[] {
-  const from = dayStartMs(weekStart(today));
-  const to = dayStartMs(addDays(weekStart(today), 7));
-  const out: { at: number; kind: StickerKind }[] = [];
-  data.entries.forEach((e) => {
-    if (e.end !== null && e.categoryId !== DRIFT_ID && e.end >= from && e.end < to && (e.end - e.start) / MIN_MS >= 25) {
-      out.push({ at: e.end, kind: out.length % 2 === 0 ? 'flower' : 'leaf' });
-    }
-  });
-  data.tasks.forEach((t) => {
-    if (t.done && t.doneAt !== null && t.doneAt >= from && t.doneAt < to) {
-      out.push({ at: t.doneAt, kind: t.priority === 2 ? 'star' : 'heart' });
-    }
-  });
-  return out.sort((a, b) => a.at - b.at).map((s) => s.kind);
 }
 
 /* ---------- Bank notifications ---------- */

@@ -88,7 +88,7 @@ export function defaultData(): AppData {
     trackers: [],
     listItems: [],
     notes: [],
-    settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
+    settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
   };
 }
 

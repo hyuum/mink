@@ -195,10 +195,8 @@ export interface Settings {
   dayStartHour: number;
   dayEndHour: number;
   /** Daily time goal in minutes; 0 hides the goal. */
-  dailyGoalMin: number;
   /** Spending allowance per Monday–Sunday week, in cents. A month's allowance is 4 × this. */
   weeklyAllowance: number;
-  stickers: boolean;
   theme: 'system' | 'light' | 'dark';
   phone: PhoneSettings;
   bank: BankSettings;

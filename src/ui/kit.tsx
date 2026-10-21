@@ -3,7 +3,6 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 import { IconCheck, IconClock, IconHome, IconMore, IconPlus, IconWallet } from './icons';
 import { actions } from '../data/store';
 import { go, moreView, openQuickAdd, toast, useRoute, type Route } from '../app/ui-state';
-import type { StickerKind } from '../data/logic';
 import type { SpendKind } from '../data/types';
 
 export function Band({ children }: { children: ReactNode }) {
@@ -119,23 +118,6 @@ export function Sheet({ open, onClose, label, children }: { open: boolean; onClo
         {children}
       </div>
     </div>
-  );
-}
-
-const STICKER_ART: Record<StickerKind, ReactNode> = {
-  flower: (
-    <g fill="#EE9BB2"><circle cx="12" cy="7" r="3.5" /><circle cx="17" cy="11" r="3.5" /><circle cx="15" cy="17" r="3.5" /><circle cx="9" cy="17" r="3.5" /><circle cx="7" cy="11" r="3.5" /><circle cx="12" cy="12" r="2.6" fill="#F2DFA6" /></g>
-  ),
-  leaf: <path d="M5 19c0-8 5-13 14-14-1 9-6 14-14 14z" fill="#7FA86B" />,
-  heart: <path d="M12 20s-7-4.5-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.5-7 10-7 10z" fill="#E07A98" />,
-  star: <path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" fill="#EBC96E" />,
-};
-
-export function Sticker({ kind, size = 30 }: { kind: StickerKind; size?: number }) {
-  return (
-    <span className="sticker" style={{ width: size, height: size }}>
-      <svg width={size * 0.55} height={size * 0.55} viewBox="0 0 24 24" aria-hidden="true">{STICKER_ART[kind]}</svg>
-    </span>
   );
 }
 

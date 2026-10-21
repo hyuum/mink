@@ -11,7 +11,7 @@ import { Band, Sheet } from '../../ui/kit';
 import { IconCheck } from '../../ui/icons';
 import { FOLDER_ICONS, TRACKER_ICONS } from '../../data/icons';
 import { IconChoice, ThingIcon } from '../../ui/things';
-import { Settings } from './More';
+import { SETTINGS_PAGES, Settings } from './More';
 
 const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? '' : 's'}`;
 const everyText = (t: TrackerItem) => {
@@ -34,11 +34,8 @@ function dueText(t: TrackerItem, today: string): { text: string; tone: '' | 'tod
 
 export function More() {
   const view = moreView.use();
-  useEffect(() => {
-    if (view.kind === 'settings' && view.section) document.getElementById(view.section)?.scrollIntoView({ block: 'start' });
-    else window.scrollTo({ top: 0 });
-  }, [view]);
-  if (view.kind === 'settings') return <Settings />;
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [view]);
+  if (view.kind === 'settings') return <Settings page={view.page} />;
   if (view.kind === 'folder') return <FolderView id={view.id} />;
   return <Hub />;
 }
@@ -108,9 +105,9 @@ function Hub() {
         </div>
         <p className="section-label">Settings</p>
         <div className="card rows">
-          {[['Activities', 'set-activities'], ['Phone tracking', 'set-phone'], ['Bank notifications', 'set-bank'],['Theme and day timeline', 'set-display'], ['Your data', 'set-data'], ['Android app', 'set-app']].map(([name, section]) => (
-            <button key={section} type="button" className="rowbtn short" onClick={() => moreView.set({ kind: 'settings', section })}>
-              <span className="grow">{name}</span><span className="chev" aria-hidden="true">›</span>
+          {SETTINGS_PAGES.map((p) => (
+            <button key={p.page} type="button" className="rowbtn short" onClick={() => moreView.set({ kind: 'settings', page: p.page })}>
+              <span className="grow"><b>{p.title}</b><small>{p.desc}</small></span><span className="chev" aria-hidden="true">›</span>
             </button>
           ))}
         </div>
@@ -439,17 +436,50 @@ function NewFolderSheet({ open, onClose }: { open: boolean; onClose: () => void 
 }
 
 function FolderOptions({ folder, open, onClose }: { folder: Folder; open: boolean; onClose: () => void }) {
-  const [name, setName] = useState(folder.name);
+  const data = useData();
+  const n = (folder.type === 'tracker' ? data.trackers : data.listItems).filter((x) => x.folderId === folder.id).length;
   return (
-    <Sheet open={open} onClose={onClose} label="Folder options">
+    <FolderOptionsSheet
+      open={open} onClose={onClose} name={folder.name} icon={folder.icon} contents={n ? plural(n, 'item') : ''}
+      onRename={(name) => actions.updateFolder(folder.id, { name })} onIcon={(icon) => actions.updateFolder(folder.id, { icon })}
+      onDelete={() => { const before = actions.deleteFolder(folder.id); moreView.set({ kind: 'hub' }); showToast(`Deleted ${folder.name}`, before); }}
+    />
+  );
+}
+
+/**
+ * Rename a folder, change its icon, or delete it. Deleting asks once, naming what goes with it;
+ * Undo is offered afterwards. Used for task lists too.
+ */
+export function FolderOptionsSheet({ open, onClose, name: initial, icon, contents, onRename, onIcon, onDelete, cantDelete }: {
+  open: boolean; onClose: () => void; name: string; icon: string; contents: string;
+  onRename: (name: string) => void; onIcon: (icon: string) => void; onDelete: () => void; cantDelete?: string;
+}) {
+  const [name, setName] = useState(initial);
+  const [confirm, setConfirm] = useState(false);
+  useEffect(() => { if (open) { setName(initial); setConfirm(false); } }, [open, initial]);
+  const save = () => { if (name.trim() && name.trim() !== initial) onRename(name.trim()); };
+  return (
+    <Sheet open={open} onClose={() => { save(); onClose(); }} label="Folder options">
       <div className="stack" style={{ gap: 12 }}>
         <h2>Folder</h2>
-        <input className="field-input" aria-label="Folder name" value={name} onChange={(e) => setName(e.target.value)} onBlur={() => name.trim() && actions.updateFolder(folder.id, { name: name.trim() })} />
-        <IconChoice icons={FOLDER_ICONS} value={folder.icon} onPick={(n) => actions.updateFolder(folder.id, { icon: n })} />
-        <div className="row" style={{ gap: 8 }}>
-          <button type="button" className="btn danger" onClick={() => { const before = actions.deleteFolder(folder.id); moreView.set({ kind: 'hub' }); onClose(); showToast(`Deleted ${folder.name}`, before); }}>Delete folder</button>
-          <button type="button" className="btn green grow" onClick={() => { if (name.trim()) actions.updateFolder(folder.id, { name: name.trim() }); onClose(); }}>Done</button>
-        </div>
+        <input className="field-input" aria-label="Folder name" value={name} onChange={(e) => setName(e.target.value)} onBlur={save} />
+        <IconChoice icons={FOLDER_ICONS} value={icon} onPick={onIcon} />
+        {confirm ? (
+          <div className="confirm" role="alert">
+            <p style={{ fontSize: 14 }}>Delete {initial}{contents ? ` and its ${contents}` : ''}? You can undo straight after.</p>
+            <div className="row" style={{ gap: 8 }}>
+              <button type="button" className="btn danger" onClick={() => { onDelete(); onClose(); }}>Delete</button>
+              <button type="button" className="btn ghost" onClick={() => setConfirm(false)}>Cancel</button>
+            </div>
+          </div>
+        ) : (
+          <div className="row" style={{ gap: 8 }}>
+            <button type="button" className="btn danger" disabled={Boolean(cantDelete)} onClick={() => setConfirm(true)}>Delete folder</button>
+            <button type="button" className="btn green grow" onClick={() => { save(); onClose(); }}>Done</button>
+          </div>
+        )}
+        {cantDelete && <p className="small muted">{cantDelete}</p>}
       </div>
     </Sheet>
   );

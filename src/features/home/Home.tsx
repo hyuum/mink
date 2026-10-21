@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { actions, useData } from '../../data/store';
-import { dayTotals, daySpend, dueTrackers, entriesForDay, entryEnd, parseTaskInput, runningEntry, stickersThisWeek, tasksForToday, trackerStatus, unloggedMin, upcomingBills, weekSpend } from '../../data/logic';
+import { dayTotals, daySpend, dueTrackers, entriesForDay, entryEnd, parseTaskInput, runningEntry, tasksForToday, trackerStatus, unloggedMin, upcomingBills, weekSpend } from '../../data/logic';
 import { DRIFT_ID } from '../../data/seed';
 import { dayStartMs, fmtClock, fmtDayLong, fmtDuration, greeting, hourLabel, isoOf, relativeDay, todayISO } from '../../lib/dates';
 import { fmtMoney, fmtMoneyShort } from '../../lib/money';
 import { go, moreView, showToast, useNow } from '../../app/ui-state';
-import { Band, Bar, Card, CheckBox, Sticker } from '../../ui/kit';
+import { Band, Bar, Card, CheckBox } from '../../ui/kit';
 import { IconPlus, IconStop, Sakura } from '../../ui/icons';
 import { ThingIcon } from '../../ui/things';
 import { BankReviewCard, useBankSuggestions } from '../money/bank';
@@ -33,7 +33,6 @@ export function Home() {
 
   const dueTasks = tasksForToday(data.tasks, today);
   const doneToday = data.tasks.filter((t) => t.done && t.doneAt !== null && isoOf(t.doneAt) === today);
-  const stickers = data.settings.stickers ? stickersThisWeek(data, today) : [];
   // From the folders in More: routines due today, and trackers pinned to Home.
   const dueRoutines = dueTrackers(data.trackers, today);
   const pinned = data.trackers.filter((t) => t.pinned);
@@ -57,13 +56,6 @@ export function Home() {
           </div>
           <Sakura size={38} />
         </div>
-        {data.settings.stickers && (
-          <div className="stickers" aria-label={`${stickers.length} stickers this week`}>
-            <span className="band-sub" style={{ marginRight: 4 }}>This week</span>
-            {stickers.slice(-5).map((k, i) => <Sticker key={i} kind={k} />)}
-            {stickers.length > 5 ? <span className="band-sub">+{stickers.length - 5}</span> : <span className="sticker empty-slot" aria-hidden="true" />}
-          </div>
-        )}
       </Band>
 
       <div className="content">

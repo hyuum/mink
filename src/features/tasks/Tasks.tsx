@@ -2,7 +2,8 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { actions, useData } from '../../data/store';
 import { allTags, groupTasks, parseTaskInput } from '../../data/logic';
 import { relativeDay, todayISO } from '../../lib/dates';
-import { moreView, taskListFilter, useNow, go } from '../../app/ui-state';
+import { moreView, showToast, taskListFilter, useNow, go } from '../../app/ui-state';
+import { FolderOptionsSheet } from '../more/Hub';
 import { Band, CheckBox } from '../../ui/kit';
 import { IconPlus } from '../../ui/icons';
 import { TaskEditor } from './TaskEditor';
@@ -21,6 +22,7 @@ export function Tasks() {
   const [text, setText] = useState('');
   const [addingList, setAddingList] = useState(false);
   const [listName, setListName] = useState('');
+  const [listOpts, setListOpts] = useState(false);
 
   const inList = data.tasks.filter((t) => list === 'all' || t.listId === list);
   const tags = allTags(inList);
@@ -50,8 +52,11 @@ export function Tasks() {
       <Band>
         {fromMore && <button type="button" className="backlink" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>‹ More</button>}
         <div className="band-row">
-          <h1>Tasks</h1>
-          <span className="band-sub">{dueToday === 0 ? 'Nothing due today' : `${dueToday} due today`}</span>
+          <div>
+            <h1>Tasks</h1>
+            <span className="band-sub">{dueToday === 0 ? 'Nothing due today' : `${dueToday} due today`}</span>
+          </div>
+          {currentList && <button type="button" className="round-btn" aria-label={`${currentList.name} options`} onClick={() => setListOpts(true)}>⋯</button>}
         </div>
         <div className="band-chips" role="tablist" aria-label="Lists">
           {[{ id: 'all', name: 'All' }, ...data.lists].map((l) => (
@@ -127,6 +132,15 @@ export function Tasks() {
         <p className="small muted" style={{ padding: '0 4px' }}>Tip: type #tags and ! or !! while adding. Tap a task to set a due date, list or priority.</p>
       </div>
       <TaskEditor id={edit} onClose={() => setEdit(null)} />
+      {currentList && (
+        <FolderOptionsSheet
+          open={listOpts} onClose={() => setListOpts(false)} name={currentList.name} icon={currentList.icon}
+          contents={(() => { const n = data.tasks.filter((t) => t.listId === currentList.id).length; return n ? `${n} ${n === 1 ? 'task' : 'tasks'}` : ''; })()}
+          onRename={(name) => actions.updateList(currentList.id, { name })} onIcon={(icon) => actions.updateList(currentList.id, { icon })}
+          onDelete={() => { const before = actions.deleteList(currentList.id); setList('all'); showToast(`Deleted ${currentList.name}`, before); }}
+          cantDelete={data.lists.length < 2 ? 'This is your only task list, so it stays.' : undefined}
+        />
+      )}
     </>
   );
 }

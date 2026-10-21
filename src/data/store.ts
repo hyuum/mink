@@ -1,7 +1,7 @@
 // The app's single source of truth: an immutable AppData snapshot, React subscriptions,
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
-import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TimeCategory, TimeEntry, TrackerItem } from './types';
+import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TaskList, TimeCategory, TimeEntry, TrackerItem } from './types';
 import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, LIST_ICON, defaultFolders, sampleData } from './seed';
 import { iconName } from './icons';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
@@ -103,8 +103,14 @@ export function migrate(raw: unknown): AppData {
     trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
     listItems: arr(d.listItems, []),
     notes: arr(d.notes, []),
-    settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
+    // The daily time goal and stickers were removed; older saves drop them here.
+    settings: { ...base.settings, ...withoutOld(d.settings), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
   };
+}
+
+function withoutOld(s: Partial<Settings> | undefined): Partial<Settings> {
+  const { dailyGoalMin: _g, stickers: _s, ...rest } = (s ?? {}) as Partial<Settings> & { dailyGoalMin?: number; stickers?: boolean };
+  return rest;
 }
 
 function withIcon<T extends { icon: string }>(x: T, fallback: string): T {
@@ -448,6 +454,9 @@ export const actions = {
     const id = uid();
     update((d) => ({ ...d, lists: [...d.lists, { id, name, icon }] }));
     return id;
+  },
+  updateList(id: ID, patch: Partial<Omit<TaskList, 'id'>>) {
+    update((d) => ({ ...d, lists: replace<TaskList>(d.lists, id, patch) }));
   },
   /** Delete a task list and its tasks. Keeps at least one list. */
   deleteList(id: ID): AppData {

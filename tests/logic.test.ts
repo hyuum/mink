@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseBankNote, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, stickersThisWeek, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseBankNote, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry } from '../src/data/types.ts';
@@ -85,7 +85,7 @@ test('task grouping', () => {
   assert.deepEqual(tasksForToday(groups.flatMap((g) => g.tasks), today).map((t) => t.id), ['urgent', 'old', 'now']);
 });
 
-test('sample data is consistent and stickers count', () => {
+test('sample data is consistent', () => {
   const now = msAt('2026-10-12', 11 * 60 + 15);
   const s = sampleData(now);
   assert.equal(s.example, true);
@@ -94,7 +94,6 @@ test('sample data is consistent and stickers count', () => {
   for (const e of s.entries) assert.ok(e.end === null || e.end > e.start, e.label);
   const ids = new Set(s.timeCategories.map((c) => c.id));
   for (const e of s.entries) assert.ok(ids.has(e.categoryId));
-  assert.ok(stickersThisWeek(s, '2026-10-12').length >= 1);
 });
 
 test('migrate fills missing fields and converts money categories', () => {

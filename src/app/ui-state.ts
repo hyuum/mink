@@ -56,8 +56,8 @@ export function setDockLabels(v: boolean) {
 /** True once a newer version of the app has been downloaded and is ready to show. */
 export const updateReady = createStore<boolean>(false);
 
-/* More: the folder hub, one folder, or settings (scrolled to a section). */
-export type MoreView = { kind: 'hub' } | { kind: 'folder'; id: string } | { kind: 'settings'; section?: string };
+/* More: the folder hub, one folder, or one settings page. */
+export type MoreView = { kind: 'hub' } | { kind: 'folder'; id: string } | { kind: 'settings'; page: 'display' | 'time' | 'spend' | 'app' };
 export const moreView = createStore<MoreView>({ kind: 'hub' });
 /** The task list to show when Tasks opens (from its folder in More); null shows all. */
 export const taskListFilter = createStore<string | null>(null);
