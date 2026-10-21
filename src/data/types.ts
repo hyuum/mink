@@ -85,6 +85,8 @@ export interface Expense {
   note: string;
   day: Day;
   billId?: ID;
+  /** Set when it came from a bank notification, so that notification isn't suggested again. */
+  bankKey?: string;
   createdAt: number;
 }
 
@@ -179,6 +181,15 @@ export interface PhoneSettings {
   apps: Record<string, ID | null>;
 }
 
+/** Spends suggested from bank notifications, in the Android app. */
+export interface BankSettings {
+  enabled: boolean;
+  /** Android package names of the apps whose notifications are read. */
+  apps: string[];
+  /** What you chose last time for a merchant (lower case), so the next spend there starts the same. */
+  merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>;
+}
+
 export interface Settings {
   /** First and last hour shown on the day timeline. */
   dayStartHour: number;
@@ -190,6 +201,7 @@ export interface Settings {
   stickers: boolean;
   theme: 'system' | 'light' | 'dark';
   phone: PhoneSettings;
+  bank: BankSettings;
 }
 
 /** The note written at the end of a day. Days without one simply don't appear in the journal. */
@@ -211,6 +223,8 @@ export interface AppData {
   planDays: Day[];
   /** Phone-use suggestions you dismissed, so they don't come back. */
   phoneDismissed: string[];
+  /** Bank notifications you dismissed, so they don't come back. */
+  bankDismissed: string[];
   milestones: Milestone[];
   expenses: Expense[];
   bills: Bill[];

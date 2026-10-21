@@ -564,3 +564,82 @@ export function stickersThisWeek(data: AppData, today: Day): StickerKind[] {
   });
   return out.sort((a, b) => a.at - b.at).map((s) => s.kind);
 }
+
+/* ---------- Bank notifications ---------- */
+
+/** A notification kept by the Android app because it showed a dollar amount. */
+export interface BankNote { key: string; pkg: string; label: string; title: string; text: string; postedAt: number }
+export interface BankSuggestion {
+  key: string;
+  day: Day;
+  at: number;
+  /** Cents. */
+  amount: number;
+  /** The shop as the notification names it, lower case. */
+  merchant: string;
+  app: string;
+  kind: SpendKind;
+  tags: string[];
+  /** What the spend will be called: the shop, or your own name for it from last time. Lower case. */
+  note: string;
+  /** A spend of the same amount is already logged that day, so this is probably a duplicate. */
+  logged: boolean;
+}
+
+/** Money coming in, or not a purchase at all. */
+const NOT_SPENDING = /\b(received|receive|deposit(ed)?|refund(ed)?|credited|paid you|sent you|incoming|salary|pay ?day|transfer(red)? from|cashback|reversal|reversed|declined|balance|available|limit|reminder|due on|statement)\b/i;
+/** Titles that name the kind of alert rather than the shop. */
+const GENERIC_TITLE = /\b(purchase|payment|paid|transaction|spent|spend|card|alert|bank|debit|credit|account|notification|approved|you)\b/i;
+const AMOUNT_RE = /(?:A?\$|AUD\s?)\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/;
+const CARD_RE = /^(visa|mastercard|master card|amex|american express|eftpos|debit|credit|card|apple pay|google pay)\b/i;
+const MERCHANT_RE =/\b(?:at|to|with|@)\s+([A-Za-z0-9][^\n]*?)(?=\s+(?:on|for|using|via|with|from|card|ending|was|has|is)\b|[.,!\n(]|\s+-\s|$)/;
+
+/** Spend names are kept in lower case, with spaces tidied. */
+export const spendName = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
+
+/**
+ * Reads a bank notification: how much was spent and where. Null for anything that isn't a purchase
+ * (money coming in, balance alerts, declined cards).
+ */
+export function parseBankNote(title: string, text: string): { amount: number; merchant: string } | null {
+  const all = `${title}\n${text}`;
+  if (NOT_SPENDING.test(all)) return null;
+  const a = AMOUNT_RE.exec(all);
+  if (!a) return null;
+  const amount = Number(a[1].replace(/,/g, '')) * 100 + Number((a[2] ?? '0').padEnd(2, '0'));
+  if (!amount) return null;
+  // The shop: "… at Mugi Café", or else the title when it names the shop (as wallet apps do).
+  const m = MERCHANT_RE.exec(text) ?? MERCHANT_RE.exec(title);
+  let merchant = m ? m[1] : '';
+  // "… with Visa ••12" names the card, not the shop.
+  if (merchant && (AMOUNT_RE.test(merchant) || CARD_RE.test(merchant))) merchant = '';
+  if (!merchant && title && !GENERIC_TITLE.test(title) && !AMOUNT_RE.test(title)) merchant = title;
+  return { amount, merchant: spendName(merchant).slice(0, 40) };
+}
+
+/**
+ * Spends to review from kept bank notifications: newest first, leaving out ones already logged from a
+ * notification or dismissed. Each starts with what you chose for that shop last time.
+ */
+export function bankSuggestions(notes: BankNote[], expenses: Expense[], merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>, dismissed: string[], toDay: (ms: number) => Day): BankSuggestion[] {
+  const used = new Set([...dismissed, ...expenses.map((e) => e.bankKey).filter((k): k is string => Boolean(k))]);
+  const out: BankSuggestion[] = [];
+  const seen = new Set<string>();
+  for (const n of [...notes].sort((a, b) => b.postedAt - a.postedAt)) {
+    if (used.has(n.key)) continue;
+    const p = parseBankNote(n.title, n.text);
+    if (!p) continue;
+    // Some banks post the same purchase twice within a minute or two.
+    const dup = `${p.amount}|${p.merchant}|${Math.round(n.postedAt / 180_000)}`;
+    if (seen.has(dup)) continue;
+    seen.add(dup);
+    const day = toDay(n.postedAt);
+    const memory = merchants[p.merchant];
+    out.push({
+      key: n.key, day, at: n.postedAt, amount: p.amount, merchant: p.merchant, app: n.label,
+      kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? p.merchant,
+      logged: expenses.some((e) => e.day === day && e.amount === p.amount && !e.bankKey),
+    });
+  }
+  return out;
+}

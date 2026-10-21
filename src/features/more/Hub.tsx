@@ -108,7 +108,7 @@ function Hub() {
         </div>
         <p className="section-label">Settings</p>
         <div className="card rows">
-          {[['Activities', 'set-activities'], ['Phone tracking', 'set-phone'], ['Theme and day timeline', 'set-display'], ['Your data', 'set-data'], ['Android app', 'set-app']].map(([name, section]) => (
+          {[['Activities', 'set-activities'], ['Phone tracking', 'set-phone'], ['Bank notifications', 'set-bank'],['Theme and day timeline', 'set-display'], ['Your data', 'set-data'], ['Android app', 'set-app']].map(([name, section]) => (
             <button key={section} type="button" className="rowbtn short" onClick={() => moreView.set({ kind: 'settings', section })}>
               <span className="grow">{name}</span><span className="chev" aria-hidden="true">›</span>
             </button>

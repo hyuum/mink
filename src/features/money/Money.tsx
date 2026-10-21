@@ -10,6 +10,7 @@ import { openQuickAdd, showToast, useNow } from '../../app/ui-state';
 import { Band, Bar, Card } from '../../ui/kit';
 import { IconLeft, IconRight } from '../../ui/icons';
 import { AllowanceEditor, BillEditor, ExpenseEditor } from './MoneyEditors';
+import { BankReviewCard, useBankSuggestions } from './bank';
 
 type Filter = { kind: SpendKind } | { tag: string } | { untagged: true } | null;
 
@@ -37,6 +38,7 @@ function SpendBars({ cols, pace, label }: { cols: (SpendSplit & { key: string; l
 
 export function Money() {
   const data = useData();
+  const bank = useBankSuggestions();
   const now = useNow(60_000);
   const today = todayISO(now);
   const [mode, setMode] = useState<'week' | 'month'>('week');
@@ -110,6 +112,7 @@ export function Money() {
       </Band>
 
       <div className="content two">
+        <BankReviewCard suggestions={bank} />
         <Card title="Need vs want">
           {sum.total === 0 ? (
             <p className="muted" style={{ fontSize: 14 }}>Nothing spent {isCurrent ? (mode === 'week' ? 'yet this week' : 'yet this month') : 'in this ' + mode}.</p>

@@ -25,6 +25,17 @@
 
         </activity>
 
+        <!-- Bank notifications: keeps spending notifications from the apps the person picks. They turn on Notification access themselves. -->
+        <service
+            android:name=".BankListener"
+            android:label="@string/app_name"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

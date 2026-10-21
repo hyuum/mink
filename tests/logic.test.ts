@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, stickersThisWeek, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseBankNote, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, stickersThisWeek, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry } from '../src/data/types.ts';
@@ -322,4 +322,33 @@ test('a painted block can carry a name, and named blocks stay separate', () => {
 test('older saves start with no day notes', () => {
   const { notes: _n, ...old } = defaultData();
   assert.deepEqual(migrate(old).notes, []);
+});
+
+test('bank notifications: amount and shop, in lower case; money coming in is skipped', () => {
+  assert.deepEqual(parseBankNote('Purchase', 'Purchase of $12.50 at MUGI CAFE on card ending 1234'), { amount: 1250, merchant: 'mugi cafe' });
+  assert.deepEqual(parseBankNote('Mugi Café', '$6.50 with Visa ••12'), { amount: 650, merchant: 'mugi café' });
+  assert.deepEqual(parseBankNote('Card transaction', 'You spent $1,204.00 at Big Store.'), { amount: 120400, merchant: 'big store' });
+  assert.deepEqual(parseBankNote('Payment', 'AUD 4.2 paid to Transit Card'), { amount: 420, merchant: 'transit card' });
+  assert.equal(parseBankNote('Bank', 'You received $120.00 from J Smith'), null);
+  assert.equal(parseBankNote('Refund', 'A refund of $15.00 from Shop'), null);
+  assert.equal(parseBankNote('Low balance', 'Your available balance is $40.12'), null);
+  assert.equal(parseBankNote('Jess', 'lunch at 1?'), null);
+});
+
+test('bank suggestions skip logged and dismissed ones, flag likely duplicates, and remember the shop', () => {
+  const day = (ms: number) => (ms < 2000 ? '2026-10-20' : '2026-10-21');
+  const notes = [
+    { key: 'a', pkg: 'bank', label: 'Bank', title: 'Purchase', text: 'Purchase of $18.40 at FRESHWAY', postedAt: 3000 },
+    { key: 'a2', pkg: 'bank', label: 'Bank', title: 'Purchase', text: 'Purchase of $18.40 at FRESHWAY', postedAt: 3100 },
+    { key: 'b', pkg: 'bank', label: 'Bank', title: 'Purchase', text: 'Purchase of $6.50 at Mugi', postedAt: 2500 },
+    { key: 'c', pkg: 'bank', label: 'Bank', title: 'Purchase', text: 'Purchase of $9.00 at Kiosk', postedAt: 1000 },
+    { key: 'd', pkg: 'bank', label: 'Bank', title: 'Purchase', text: 'Purchase of $3.00 at Shop', postedAt: 900 },
+  ];
+  const expenses = [
+    { id: 'e1', amount: 1840, kind: 'need' as const, tags: [], note: 'groceries', day: '2026-10-21', createdAt: 0 },
+    { id: 'e2', amount: 900, kind: 'want' as const, tags: [], note: 'kiosk', day: '2026-10-20', bankKey: 'c', createdAt: 0 },
+  ];
+  const s = bankSuggestions(notes, expenses, { mugi: { kind: 'want', tags: ['coffee'], note: 'matcha latte' } }, ['d'], day);
+  assert.deepEqual(s.map((x) => [x.key, x.merchant, x.note, x.logged]), [['a2', 'freshway', 'freshway', true], ['b', 'mugi', 'matcha latte', false]]);
+  assert.deepEqual(s[1].tags, ['coffee']);
 });

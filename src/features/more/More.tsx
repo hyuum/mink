@@ -6,6 +6,7 @@ import { Band, Card, ChipGroup } from '../../ui/kit';
 import { IconArrowDown, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
 import { PhoneSettingsCard } from '../time/phone';
+import { BankSettingsCard } from '../money/bank';
 import { phoneAvailable } from '../../lib/phone';
 import type { TimeCategory } from '../../data/types';
 
@@ -97,6 +98,7 @@ export function Settings() {
         </Card>
 
         <div id="set-phone"><PhoneSettingsCard /></div>
+        <div id="set-bank"><BankSettingsCard /></div>
 
         <Card title="Your data" id="set-data">
           <div className="stack">

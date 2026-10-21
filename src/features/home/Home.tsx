@@ -8,9 +8,11 @@ import { go, moreView, showToast, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, CheckBox, Sticker } from '../../ui/kit';
 import { IconPlus, IconStop, Sakura } from '../../ui/icons';
 import { ThingIcon } from '../../ui/things';
+import { BankReviewCard, useBankSuggestions } from '../money/bank';
 
 export function Home() {
   const data = useData();
+  const bank = useBankSuggestions();
   const running = runningEntry(data.entries);
   const now = useNow(running ? 1000 : 30_000);
   const today = todayISO(now);
@@ -65,6 +67,7 @@ export function Home() {
       </Band>
 
       <div className="content">
+        <BankReviewCard suggestions={bank} />
         {(dueRoutines.length > 0 || pinned.length > 0) && (
           <button type="button" className="card home-due" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>
             {dueRoutines.length > 0 && <span><b>Due today</b> · {dueRoutines.map((d) => d.item.name).join(', ')}</span>}

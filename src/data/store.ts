@@ -5,7 +5,7 @@ import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSett
 import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, LIST_ICON, defaultFolders, sampleData } from './seed';
 import { iconName } from './icons';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
-import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, templateFor, weekdayIndex } from './logic';
+import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, spendName, templateFor, weekdayIndex } from './logic';
 import { uid } from '../lib/id';
 import { addDays, dayStartMs, msAt } from '../lib/dates';
 import type { Day } from './types';
@@ -91,8 +91,10 @@ export function migrate(raw: unknown): AppData {
     templates: arr(d.templates, []),
     planDays,
     phoneDismissed: arr(d.phoneDismissed, []),
+    bankDismissed: arr(d.bankDismissed, []),
     milestones: arr(d.milestones, []),
-    expenses,
+    // Spend names are kept in lower case.
+    expenses: expenses.map((e) => (e.note === spendName(e.note) ? e : { ...e, note: spendName(e.note) })),
     bills,
     // Folders, lists and trackers used to carry an emoji; they now carry an icon name.
     lists: arr(d.lists, base.lists).map((l) => withIcon(l, LIST_ICON[l.id] ?? 'list-checks')),
@@ -101,7 +103,7 @@ export function migrate(raw: unknown): AppData {
     trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
     listItems: arr(d.listItems, []),
     notes: arr(d.notes, []),
-    settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) } },
+    settings: { ...base.settings, ...(d.settings ?? {}), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
   };
 }
 
@@ -271,6 +273,32 @@ export const actions = {
     }));
     return before;
   },
+  /** Log spends suggested from bank notifications, and remember each merchant's choices for next time. */
+  approveBank(items: { key: string; day: Day; amount: number; kind: SpendKind; tags: string[]; note: string; merchant: string }[]): AppData {
+    const before = state;
+    update((d) => {
+      const merchants = { ...d.settings.bank.merchants };
+      for (const x of items) {
+        const note = spendName(x.note);
+        if (x.merchant) merchants[spendName(x.merchant)] = { kind: x.kind, tags: x.tags, ...(note && note !== spendName(x.merchant) ? { note } : {}) };
+      }
+      return {
+        ...d,
+        expenses: [...d.expenses, ...items.map((x) => ({ id: uid(), amount: x.amount, kind: x.kind, tags: x.tags, note: spendName(x.note) || spendName(x.merchant), day: x.day, bankKey: x.key, createdAt: Date.now() }))],
+        settings: { ...d.settings, bank: { ...d.settings.bank, merchants } },
+      };
+    });
+    return before;
+  },
+  /** Hide bank suggestions for good. Keeps the most recent 1000. */
+  dismissBank(keys: string[]): AppData {
+    const before = state;
+    update((d) => ({ ...d, bankDismissed: [...d.bankDismissed.filter((k) => !keys.includes(k)), ...keys].slice(-1000) }));
+    return before;
+  },
+  updateBankSettings(patch: Partial<AppData['settings']['bank']>) {
+    update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ...patch } } }));
+  },
   /** Hide phone-use suggestions for good. Keeps the most recent 1000. */
   dismissPhone(keys: string[]): AppData {
     const before = state;
@@ -355,11 +383,12 @@ export const actions = {
   },
 
   /* Money */
+  /** Spend names are kept in lower case. */
   addExpense(e: Omit<Expense, 'id' | 'createdAt'>) {
-    update((d) => ({ ...d, expenses: [...d.expenses, { ...e, id: uid(), createdAt: Date.now() }] }));
+    update((d) => ({ ...d, expenses: [...d.expenses, { ...e, note: spendName(e.note), id: uid(), createdAt: Date.now() }] }));
   },
   updateExpense(id: ID, patch: Partial<Expense>) {
-    update((d) => ({ ...d, expenses: replace(d.expenses, id, patch) }));
+    update((d) => ({ ...d, expenses: replace(d.expenses, id, patch.note === undefined ? patch : { ...patch, note: spendName(patch.note) }) }));
   },
   deleteExpense(id: ID): AppData {
     const before = state;
@@ -384,7 +413,7 @@ export const actions = {
     if (!bill) return before;
     update((d) => ({
       ...d,
-      expenses: [...d.expenses, { id: uid(), amount: bill.amount, kind: bill.kind, tags: bill.tags, note: bill.name, day: today, billId: bill.id, createdAt: Date.now() }],
+      expenses: [...d.expenses, { id: uid(), amount: bill.amount, kind: bill.kind, tags: bill.tags, note: spendName(bill.name), day: today, billId: bill.id, createdAt: Date.now() }],
       bills: replace(d.bills, id, { nextDue: nextDue(bill.nextDue, bill.cadence) }),
     }));
     return before;
@@ -492,7 +521,7 @@ export const actions = {
     update((d) => ({
       ...d,
       listItems: remove(d.listItems, id),
-      expenses: [...d.expenses, { id: uid(), amount: item.price ?? 0, kind: 'want', tags: ['wishlist'], note: item.text, day: today, createdAt: Date.now() }],
+      expenses: [...d.expenses, { id: uid(), amount: item.price ?? 0, kind: 'want', tags: ['wishlist'], note: spendName(item.text), day: today, createdAt: Date.now() }],
     }));
     return before;
   },

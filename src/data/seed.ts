@@ -73,6 +73,7 @@ export function defaultData(): AppData {
     templates: [],
     planDays: [],
     phoneDismissed: [],
+    bankDismissed: [],
     milestones: [],
     expenses: [],
     bills: [],
@@ -87,7 +88,7 @@ export function defaultData(): AppData {
     trackers: [],
     listItems: [],
     notes: [],
-    settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings() },
+    settings: { dayStartHour: 8, dayEndHour: 22, dailyGoalMin: 0, weeklyAllowance: 25000, stickers: true, theme: 'system', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
   };
 }
 
@@ -168,7 +169,7 @@ export function sampleData(now: number = Date.now()): AppData {
     [-14, 1800, 'want', ['takeaway'], 'Ramen'], [-15, 2000, 'need', ['transport'], 'Opal top-up'], [-17, 900, 'want', ['coffee'], 'Coffee & cake'],
   ];
   const expenses: Expense[] = spend.map(([d, amount, kind, tags, note], i) => ({
-    id: uid(), amount, kind, tags, note, day: addDays(today, d), createdAt: now - i * 1000,
+    id: uid(), amount, kind, tags, note: note.toLowerCase(), day: addDays(today, d), createdAt: now - i * 1000,
   }));
 
   const task = (title: string, listId: string, due: number | null, priority: 0 | 1 | 2 = 0, tags: string[] = [], done = false): Task => ({

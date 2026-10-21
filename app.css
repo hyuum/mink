@@ -602,3 +602,23 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .trow .tick { color: var(--green-strong); flex: none; display: grid; place-items: center; }
 .more-opts { display: block; margin: -6px auto 8px; }
 @media (prefers-reduced-motion: reduce) { .tswipe .trow { transition: none; } }
+
+/* Spends from bank notifications */
+.bank-card { display: flex; align-items: center; gap: 12px; border: 2px solid var(--done); }
+.bank-list .section-label { margin: 6px 0 2px; }
+.bank-row { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); }
+.bank-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--done); margin: 0; }
+.bank-name { min-width: 0; width: 100%; border: none; border-bottom: 1.5px dashed transparent; border-radius: 0; background: none; color: var(--ink); font: inherit; font-size: 15px; font-weight: 700; padding: 3px 0; text-transform: lowercase; }
+.bank-name:focus { outline: none; border-bottom-color: var(--done); }
+.bank-amt { font-size: 16px; font-variant-numeric: tabular-nums; }
+.bank-meta { grid-column: 2 / 4; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.bank-row.off .bank-name, .bank-row.off .bank-amt { opacity: .45; }
+.seg-mini { display: inline-flex; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+.seg-mini button { border: none; background: none; color: var(--muted); font-size: 12px; padding: 4px 10px; }
+.seg-mini button.need[aria-pressed="true"] { background: var(--need); color: #18200F; font-weight: 700; }
+.seg-mini button.want[aria-pressed="true"] { background: var(--want); color: #2A1119; font-weight: 700; }
+.chip-mini { font-size: 11px; background: var(--soft); color: var(--ink); border-radius: 8px; padding: 1px 7px; }
+.warn-mini { font-size: 11px; background: var(--pink-soft); color: var(--pink-ink); border-radius: 8px; padding: 1px 7px; }
+.bank-app { gap: 10px; min-height: 44px; }
+.bank-app b { display: block; font-size: 14px; }
+.bank-app small { display: block; font-size: 12px; color: var(--muted); }
