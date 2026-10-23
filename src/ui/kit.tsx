@@ -96,12 +96,16 @@ export function Bar({ segments, max, height = 6 }: { segments: { value: number; 
 
 export function Sheet({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
+  // Kept in a ref: a new onClose each render must not re-run the effect below, which would pull focus
+  // back to the sheet and close the keyboard while someone is typing in it.
+  const close = useRef(onClose);
+  close.current = onClose;
   useEffect(() => {
     if (!open) return;
     const prev = document.activeElement as HTMLElement | null;
     // Focus the sheet itself so phones don't pop the keyboard over the content.
     ref.current?.focus({ preventScroll: true });
-    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
+    const onKey = (e: globalThis.KeyboardEvent) => { if (e.key === 'Escape') close.current(); };
     document.addEventListener('keydown', onKey);
     document.body.style.overflow = 'hidden';
     return () => {
@@ -109,7 +113,7 @@ export function Sheet({ open, onClose, label, children }: { open: boolean; onClo
       document.body.style.overflow = '';
       prev?.focus?.({ preventScroll: true });
     };
-  }, [open, onClose]);
+  }, [open]);
   if (!open) return null;
   return (
     <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>

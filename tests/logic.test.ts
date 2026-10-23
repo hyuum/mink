@@ -2,10 +2,10 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, paintRange, parseBankNote, parseTaskInput, rangeSummary, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
-import type { Expense, Task, TimeEntry } from '../src/data/types.ts';
+import type { Expense, Task, TimeEntry, TrackerItem } from '../src/data/types.ts';
 
 test('dates', () => {
   assert.equal(weekStart('2026-10-12'), '2026-10-12'); // Monday
@@ -301,8 +301,8 @@ test('migrate swaps the emoji older saves used for icon names', () => {
     trackers: [{ id: 't', folderId: 'f', name: 'Sheets', emoji: '🛏️', kind: 'since', hits: [], since: '2026-09-01' }],
   };
   const d = migrate(old);
-  assert.deepEqual(d.lists.map((l) => l.icon), ['graduation-cap', 'gift']);
-  assert.deepEqual(d.folders.map((f) => f.icon), ['sprout', 'folder']);
+  // Folders became pages, after the lists.
+  assert.deepEqual(d.lists.map((l) => l.icon), ['graduation-cap', 'gift', 'sprout', 'list-checks']);
   assert.equal(d.trackers[0].icon, 'bed-double');
   assert.ok(!('emoji' in d.trackers[0]));
   assert.equal(migrate(d).trackers[0].icon, 'bed-double');
@@ -350,4 +350,55 @@ test('bank suggestions skip logged and dismissed ones, flag likely duplicates, a
   const s = bankSuggestions(notes, expenses, { mugi: { kind: 'want', tags: ['coffee'], note: 'matcha latte' } }, ['d'], day);
   assert.deepEqual(s.map((x) => [x.key, x.merchant, x.note, x.logged]), [['a2', 'freshway', 'freshway', true], ['b', 'mugi', 'matcha latte', false]]);
   assert.deepEqual(s[1].tags, ['coffee']);
+});
+
+test('typed lines become the right kind', () => {
+  assert.deepEqual(parseLine('vacuum every week'), { kind: 'repeat', text: 'Vacuum', every: { n: 1, unit: 'week' } });
+  assert.deepEqual(parseLine('water plants every 3 days'), { kind: 'repeat', text: 'Water plants', every: { n: 3, unit: 'day' } });
+  assert.deepEqual(parseLine('bins every sun'), { kind: 'repeat', text: 'Bins', every: { n: 1, unit: 'week' }, weekday: 6 });
+  assert.deepEqual(parseLine('rent monthly'), { kind: 'repeat', text: 'Rent', every: { n: 1, unit: 'month' } });
+  assert.deepEqual(parseLine('since I called Sam'), { kind: 'since', text: 'Called Sam' });
+  assert.deepEqual(parseLine('## Shopping'), { kind: 'heading', text: 'Shopping' });
+  assert.deepEqual(parseLine('- spare key is with Jess'), { kind: 'note', text: 'spare key is with Jess' });
+  assert.deepEqual(parseLine('oat milk'), { kind: 'todo', text: 'Oat milk' });
+});
+
+test('a weekday repeat comes due on that day, and stays due until done', () => {
+  // 2026-10-18 is a Sunday; 2026-10-22 a Thursday.
+  const bins: TrackerItem = { id: 'b', folderId: 'p', name: 'Bins', icon: '', kind: 'every', every: { n: 1, unit: 'week' }, weekday: 6, hits: ['2026-10-18'], since: '2026-10-01' };
+  assert.equal(repeatDue(bins), '2026-10-25');
+  assert.equal(repeatDue({ ...bins, hits: ['2026-10-11'] }), '2026-10-18');
+  assert.equal(repeatDue({ ...bins, hits: [], since: '2026-10-22' }), '2026-10-25');
+  assert.equal(repeatText(bins), 'every Sunday');
+});
+
+test('old folders and their items become pages of lines, in order', () => {
+  const old = {
+    ...defaultData(),
+    lists: [{ id: 'uni', name: 'Uni', icon: 'graduation-cap' }],
+    tasks: [{ id: 'k', title: 'Lab report', listId: 'uni', tags: [], priority: 0, due: null, done: false, doneAt: null, createdAt: 5 }],
+    folders: [{ id: 'g', name: 'Groceries', icon: 'shopping-cart', type: 'check' }, { id: 'w', name: 'Wishlist', icon: 'gift', type: 'wish' }],
+    listItems: [{ id: 'm', folderId: 'g', text: 'Oat milk', createdAt: 1 }, { id: 'e', folderId: 'g', text: 'Eggs', done: true, createdAt: 2 }, { id: 'c', folderId: 'w', text: 'Camera', price: 12000, createdAt: 3 }],
+    trackers: [{ id: 'r', folderId: 'g', name: 'Restock', icon: 'sparkles', kind: 'every', every: { n: 1, unit: 'week' }, hits: [], since: '2026-10-01' }],
+  };
+  const d = migrate(old);
+  assert.deepEqual(d.lists.map((l) => l.name), ['Uni', 'Groceries', 'Wishlist']);
+  assert.ok(!('folders' in d) && !('listItems' in d));
+  assert.deepEqual(pageItems(d, 'g').map((i) => [i.kind, 'task' in i ? i.task.title : 'tracker' in i ? i.tracker.name : '']), [['repeat', 'Restock'], ['todo', 'Oat milk'], ['todo', 'Eggs']]);
+  assert.equal(d.tasks.find((t) => t.id === 'e')?.done, true);
+  assert.deepEqual(pageItems(d, 'w').map((i) => i.kind), ['todo']);
+  assert.ok(d.tasks.every((t) => typeof t.order === 'number'));
+});
+
+test('page summaries name what is due and counts past their aim', () => {
+  const today = '2026-10-22';
+  const data = {
+    tasks: [], lines: [],
+    trackers: [
+      { id: 'a', folderId: 'p', name: 'Laundry', icon: '', kind: 'every' as const, every: { n: 1, unit: 'week' as const }, hits: ['2026-10-10'], since: '2026-10-01', order: 0 },
+      { id: 'b', folderId: 'p', name: 'Called Grandma', icon: '', kind: 'since' as const, aim: 21, hits: ['2026-09-12'], since: '2026-09-01', order: 1 },
+    ],
+  };
+  assert.equal(pageSummary(data, 'p', today), 'Laundry due · 40 days since called grandma');
+  assert.equal(pastAim(data.trackers[1], today), true);
 });

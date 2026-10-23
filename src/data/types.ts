@@ -102,6 +102,10 @@ export interface Bill {
   nextDue: Day;
 }
 
+/**
+ * A page in More, written like a note. Its lines are to-dos (in `tasks`), repeats and days-since counts
+ * (in `trackers`), and headings and plain notes (in `lines`), kept in one order by each line's `order`.
+ */
 export interface TaskList {
   id: ID;
   name: string;
@@ -109,24 +113,15 @@ export interface TaskList {
   icon: string;
 }
 
-/** A folder in More. Task folders are the task lists in `lists`; every other kind lives in `folders`. */
-export type FolderType = 'tracker' | 'check' | 'collect' | 'wish';
-
-export interface Folder {
-  id: ID;
-  name: string;
-  icon: string;
-  type: FolderType;
-}
-
 export type RepeatUnit = 'day' | 'week' | 'month';
 
 /**
- * Something in a tracker folder. "since" counts days since it last happened (habits to avoid);
- * "every" repeats and shows when it's next due (chores, habits to keep up).
+ * A line on a page that tracks time passing. "since" counts days since it last happened, with an
+ * optional aim; "every" repeats and shows when it's next due.
  */
 export interface TrackerItem {
   id: ID;
+  /** The page it's on (a `lists` id). */
   folderId: ID;
   name: string;
   icon: string;
@@ -134,25 +129,32 @@ export interface TrackerItem {
   every?: { n: number; unit: RepeatUnit };
   /** For monthly repeats: due on this day of the month (1–31) instead of a month after last time. */
   onDay?: number;
+  /** For repeats due on a set weekday (0 = Monday … 6 = Sunday) rather than a set time after last done. */
+  weekday?: number;
+  /** For days-since: the most days it should go before it's flagged. */
+  aim?: number;
   /** Days it happened or was done, oldest first. */
   hits: Day[];
   /** The day it was added, so a new repeat isn't due straight away. */
   since: Day;
   pinned?: boolean;
+  /** Position on its page, shared with the page's to-dos and text lines. */
+  order?: number;
 }
 
-/** Something in a checklist, collection or wishlist folder. */
-export interface ListItem {
+/** A heading or a plain line of text on a page. */
+export interface TextLine {
   id: ID;
-  folderId: ID;
+  listId: ID;
+  kind: 'heading' | 'note';
   text: string;
-  done?: boolean;
-  status?: 'want' | 'doing' | 'done';
-  stars?: number;
-  /** Wishlist price in cents. */
-  price?: number;
-  createdAt: number;
+  order: number;
+  /** A heading whose lines are folded away. */
+  collapsed?: boolean;
 }
+
+/** The kinds of line a page can hold. */
+export type LineKind = 'todo' | 'repeat' | 'since' | 'heading' | 'note';
 
 export type Priority = 0 | 1 | 2;
 
@@ -166,6 +168,8 @@ export interface Task {
   done: boolean;
   doneAt: number | null;
   createdAt: number;
+  /** Position on its page, shared with the page's other lines. */
+  order?: number;
 }
 
 /** Phone tracking, in the Android app: long stretches of phone use become suggested blocks. */
@@ -228,9 +232,8 @@ export interface AppData {
   bills: Bill[];
   lists: TaskList[];
   tasks: Task[];
-  folders: Folder[];
   trackers: TrackerItem[];
-  listItems: ListItem[];
+  lines: TextLine[];
   notes: DayNote[];
   settings: Settings;
 }

@@ -58,18 +58,19 @@ export function Tasks() {
           </div>
           {currentList && <button type="button" className="round-btn" aria-label={`${currentList.name} options`} onClick={() => setListOpts(true)}>⋯</button>}
         </div>
-        <div className="band-chips" role="tablist" aria-label="Lists">
-          {[{ id: 'all', name: 'All' }, ...data.lists].map((l) => (
+        <div className="band-chips" role="tablist" aria-label="Pages">
+          {/* Only pages that have to-dos; pages of repeats and counts don't belong here. */}
+          {[{ id: 'all', name: 'All' }, ...data.lists.filter((l) => l.id === list || data.tasks.some((t) => t.listId === l.id))].map((l) => (
             <button key={l.id} role="tab" className="chip" aria-selected={list === l.id} onClick={() => { setList(l.id); setTag(null); }}>
               {l.name} <span style={{ opacity: 0.7 }}>{(l.id === 'all' ? data.tasks : data.tasks.filter((t) => t.listId === l.id)).filter((t) => !t.done).length}</span>
             </button>
           ))}
-          <button className="chip" onClick={() => setAddingList(true)}>+ List</button>
+          <button className="chip" onClick={() => setAddingList(true)}>+ Page</button>
         </div>
         {addingList && (
           <form className="row" onSubmit={addList}>
-            <label htmlFor="new-list" className="sr-only">New list name</label>
-            <input id="new-list" autoFocus value={listName} onChange={(e) => setListName(e.target.value)} placeholder="New list name" style={{ flex: 1, minHeight: 40, borderRadius: 12, border: 'none', padding: '0 12px', fontSize: 16, background: 'var(--card)', color: 'var(--ink)' }} />
+            <label htmlFor="new-list" className="sr-only">New page name</label>
+            <input id="new-list" autoFocus value={listName} onChange={(e) => setListName(e.target.value)} placeholder="New page name" style={{ flex: 1, minHeight: 40, borderRadius: 12, border: 'none', padding: '0 12px', fontSize: 16, background: 'var(--card)', color: 'var(--ink)' }} />
             <button className="btn" type="submit">Add</button>
             <button className="btn" type="button" onClick={() => setAddingList(false)}>Cancel</button>
           </form>

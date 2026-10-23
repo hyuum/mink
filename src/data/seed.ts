@@ -1,5 +1,5 @@
 // Starting data: sensible defaults for a fresh install, plus an optional example week.
-import type { AppData, DayTemplate, Expense, Folder, ListItem, Milestone, MilestoneKind, PhoneSettings, SpendKind, Task, TemplateBlock, TimeCategory, TimeEntry, TrackerItem } from './types';
+import type { AppData, DayTemplate, Expense, Milestone, MilestoneKind, PhoneSettings, SpendKind, Task, TaskList, TemplateBlock, TimeCategory, TimeEntry, TrackerItem } from './types';
 import { addDays, fromISO, msAt, todayISO } from '../lib/dates';
 import { uid } from '../lib/id';
 
@@ -31,16 +31,20 @@ export const CATEGORY_COLORS = ['#8DBA78', '#6E9A5E', '#BFD6A9', '#DCE8CF', '#EE
 
 export const DRIFT_ID = 'drift';
 
-/** The folders a fresh install starts with in More, alongside the task lists. */
-export function defaultFolders(): Folder[] {
+export const LIST_ICON: Record<string, string> = { uni: 'graduation-cap', work: 'briefcase', personal: 'leaf', chores: 'brush', habits: 'sprout', routines: 'calendar-check', groceries: 'shopping-cart' };
+
+/** The pages a fresh install starts with in More. */
+export function defaultPages(): TaskList[] {
   return [
-    { id: 'habits', name: 'Habits', icon: 'sprout', type: 'tracker' },
-    { id: 'routines', name: 'Routines', icon: 'calendar-check', type: 'tracker' },
-    { id: 'groceries', name: 'Groceries', icon: 'shopping-cart', type: 'check' },
+    { id: 'uni', name: 'Uni', icon: LIST_ICON.uni },
+    { id: 'work', name: 'Work', icon: LIST_ICON.work },
+    { id: 'personal', name: 'Personal', icon: LIST_ICON.personal },
+    { id: 'chores', name: 'Chores', icon: LIST_ICON.chores },
+    { id: 'habits', name: 'Habits', icon: LIST_ICON.habits },
+    { id: 'routines', name: 'Routines', icon: LIST_ICON.routines },
+    { id: 'groceries', name: 'Groceries', icon: LIST_ICON.groceries },
   ];
 }
-
-export const LIST_ICON: Record<string, string> = { uni: 'graduation-cap', work: 'briefcase', personal: 'leaf', chores: 'brush' };
 
 /** Scrolling and video apps count as Drift; music, maps, calls and the camera don't count. Everything else is Drift too. */
 export function defaultPhoneSettings(): PhoneSettings {
@@ -77,16 +81,10 @@ export function defaultData(): AppData {
     milestones: [],
     expenses: [],
     bills: [],
-    lists: [
-      { id: 'uni', name: 'Uni', icon: LIST_ICON.uni },
-      { id: 'work', name: 'Work', icon: LIST_ICON.work },
-      { id: 'personal', name: 'Personal', icon: LIST_ICON.personal },
-      { id: 'chores', name: 'Chores', icon: LIST_ICON.chores },
-    ],
+    lists: defaultPages(),
     tasks: [],
-    folders: defaultFolders(),
     trackers: [],
-    listItems: [],
+    lines: [],
     notes: [],
     settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
   };
@@ -199,15 +197,19 @@ export function sampleData(now: number = Date.now()): AppData {
       { id: uid(), name: 'Spotify', amount: 1399, kind: 'want', tags: ['subscriptions'], cadence: 'monthly', nextDue: addDays(today, 6) },
       { id: uid(), name: 'Gym', amount: 2200, kind: 'need', tags: ['health'], cadence: 'weekly', nextDue: addDays(today, 7) },
     ],
-    tasks,
+    lists: [...defaultPages(), { id: 'friends', name: 'Friends', icon: 'users' }],
+    tasks: [...tasks, ...sampleShopping(now)],
     trackers: sampleTrackers(today),
-    listItems: sampleListItems(now),
+    lines: [
+      { id: uid(), listId: 'routines', kind: 'heading', text: 'Around the house', order: -1 },
+      { id: uid(), listId: 'routines', kind: 'heading', text: 'Money', order: 4.5 },
+      { id: uid(), listId: 'friends', kind: 'note', text: 'Grandma’s birthday is 3 Dec', order: 3.5 },
+    ],
     notes: [
       { day: addDays(today, -1), text: 'Lab took twice as long as planned. Ate lunch at my desk again. Good chat with Jess on the walk home though.', updatedAt: now },
       { day: addDays(today, -2), text: 'Slow morning, too much scrolling. Readings finally done by 4.', updatedAt: now },
       { day: addDays(today, -5), text: 'Market with Jess! Bought the matcha bowl I wanted. Early night.', updatedAt: now },
     ],
-    folders: [...defaultFolders(), { id: 'friends', name: 'Friends', icon: 'users', type: 'tracker' }, { id: 'books', name: 'Books', icon: 'book-open', type: 'collect' }, { id: 'wishlist', name: 'Wishlist', icon: 'gift', type: 'wish' }],
   };
 }
 
@@ -220,25 +222,21 @@ function sampleTrackers(today: string): TrackerItem[] {
     t('habits', 'Gym', 'dumbbell', 'every', ago(1, 3, 6, 8, 11, 14, 16, 19), { every: { n: 3, unit: 'day' } }),
     t('habits', 'Bubble tea', 'cup-soda', 'since', ago(4, 9, 15, 22)),
     t('habits', 'Call home', 'phone', 'every', ago(9, 17, 24), { every: { n: 1, unit: 'week' } }),
-    t('routines', 'Laundry', 'shirt', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' } }),
-    t('routines', 'Water plants', 'sprout', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' } }),
-    t('routines', 'Change bedsheets', 'bed-double', 'every', ago(10, 24), { every: { n: 2, unit: 'week' } }),
-    t('routines', 'Clean the drain', 'droplets', 'since', ago(47)),
-    t('routines', 'Defrost the freezer', 'refrigerator', 'since', ago(80)),
-    t('friends', 'Mum', 'phone', 'since', ago(9, 16, 25)),
-    t('friends', 'Jess', 'message-circle', 'since', ago(2, 5, 12)),
-    t('friends', 'Sam', 'message-circle', 'since', ago(23)),
-    t('friends', 'Grandma', 'phone', 'since', ago(40)),
+    t('routines', 'Laundry', 'shirt', 'every', ago(6, 13, 20, 27), { every: { n: 1, unit: 'week' }, order: 0 }),
+    t('routines', 'Water plants', 'sprout', 'every', ago(3, 6, 9, 13), { every: { n: 3, unit: 'day' }, order: 1 }),
+    t('routines', 'Change bedsheets', 'bed-double', 'every', ago(10, 24), { every: { n: 2, unit: 'week' }, order: 2 }),
+    t('routines', 'Clean the drain', 'droplets', 'since', ago(47), { aim: 90, order: 3 }),
+    t('routines', 'Defrost the freezer', 'refrigerator', 'since', ago(80), { order: 4 }),
+    t('friends', 'Mum', 'phone', 'since', ago(9, 16, 25), { order: 0 }),
+    t('friends', 'Jess', 'message-circle', 'since', ago(2, 5, 12), { order: 1 }),
+    t('friends', 'Sam', 'message-circle', 'since', ago(23), { order: 2 }),
+    t('friends', 'Grandma', 'phone', 'since', ago(40), { aim: 21, order: 3 }),
     // Rent was paid on the 1st of this month and last month.
-    t('routines', 'Pay rent', 'banknote', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1 }),
+    t('routines', 'Pay rent', 'banknote', 'every', [addDays(today, -(fromISO(today).getDate() - 1) - 30), addDays(today, -(fromISO(today).getDate() - 1))].sort(), { every: { n: 1, unit: 'month' }, onDay: 1, order: 5 }),
   ];
 }
 
-function sampleListItems(now: number): ListItem[] {
-  const item = (folderId: string, text: string, extra: Partial<ListItem> = {}): ListItem => ({ id: uid(), folderId, text, createdAt: now, ...extra });
-  return [
-    item('groceries', 'Oat milk'), item('groceries', 'Eggs', { done: true }), item('groceries', 'Matcha powder'), item('groceries', 'Rice'),
-    item('books', 'Piranesi', { status: 'doing' }), item('books', 'Tomorrow, and Tomorrow, and Tomorrow', { status: 'done', stars: 5 }), item('books', 'The Remains of the Day', { status: 'want' }),
-    item('wishlist', 'Ceramic matcha bowl', { price: 3800 }), item('wishlist', 'Film camera', { price: 12000 }),
-  ];
+function sampleShopping(now: number): Task[] {
+  const item = (title: string, done = false): Task => ({ id: uid(), title, listId: 'groceries', tags: [], priority: 0, due: null, done, doneAt: done ? now - 3_600_000 : null, createdAt: now });
+  return [item('Oat milk'), item('Eggs', true), item('Matcha powder'), item('Rice')];
 }

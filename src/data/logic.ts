@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, Milestone, PhoneSettings, PlannedBlock, Priority, SpendKind, Task, TimeEntry, TrackerItem } from './types';
+import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, SpendKind, Task, TextLine, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 import { MILESTONE_KINDS } from './seed';
 
@@ -272,6 +272,12 @@ export function repeatDue(t: TrackerItem): Day {
   const every = t.every ?? { n: 1, unit: 'week' as const };
   const last = t.hits.length ? t.hits[t.hits.length - 1] : null;
   const base = last ?? t.since;
+  if (t.weekday !== undefined) {
+    // On a set weekday: the first such day after it was last done (or on/after the day it was added).
+    // Not done since that day came round means it's due (or overdue) from then.
+    const ahead = (t.weekday - weekdayIndex(base) + 7) % 7;
+    return addDays(base, last ? ahead || 7 : ahead);
+  }
   if (every.unit === 'month' && t.onDay) {
     // The first chosen day of the month after it was last done (or on/after the day it was added).
     let due = addMonthsToDay(base, 0, t.onDay);
@@ -314,6 +320,114 @@ export function dueTrackers(trackers: TrackerItem[], today: Day): { item: Tracke
     .filter(({ s }) => s.kind === 'every' && s.daysLeft <= 0 && !s.doneToday)
     .map(({ item, s }) => ({ item, daysLeft: s.kind === 'every' ? s.daysLeft : 0 }))
     .sort((a, b) => a.daysLeft - b.daysLeft);
+}
+
+/* ---------- Pages ---------- */
+
+/** One line of a page, whichever array it lives in. */
+export type PageItem =
+  | { kind: 'todo'; id: ID; order: number; task: Task }
+  | { kind: 'repeat' | 'since'; id: ID; order: number; tracker: TrackerItem }
+  | { kind: 'heading' | 'note'; id: ID; order: number; line: TextLine };
+
+/** A page's lines in order. */
+export function pageItems(data: Pick<AppData, 'tasks' | 'trackers' | 'lines'>, listId: ID): PageItem[] {
+  const out: PageItem[] = [
+    ...data.trackers.filter((t) => t.folderId === listId).map((t): PageItem => ({ kind: t.kind === 'since' ? 'since' : 'repeat', id: t.id, order: t.order ?? 0, tracker: t })),
+    ...data.tasks.filter((t) => t.listId === listId).map((t): PageItem => ({ kind: 'todo', id: t.id, order: t.order ?? 0, task: t })),
+    ...data.lines.filter((l) => l.listId === listId).map((l): PageItem => ({ kind: l.kind, id: l.id, order: l.order, line: l })),
+  ];
+  return out.sort((a, b) => a.order - b.order);
+}
+
+/** The next free position at the end of a page. */
+export const nextOrder = (data: Pick<AppData, 'tasks' | 'trackers' | 'lines'>, listId: ID) =>
+  pageItems(data, listId).reduce((m, i) => Math.max(m, i.order + 1), 0);
+
+/**
+ * Gives every to-do and tracker a place on its page, for data saved before pages had an order:
+ * repeats and counts first (as they were listed), then to-dos oldest first, after anything already placed.
+ */
+export function withOrders<T extends Pick<AppData, 'tasks' | 'trackers' | 'lines'>>(data: T): T {
+  if (data.tasks.every((t) => t.order !== undefined) && data.trackers.every((t) => t.order !== undefined)) return data;
+  const next = new Map<ID, number>();
+  const take = (listId: ID) => { const n = next.get(listId) ?? 0; next.set(listId, n + 1); return n; };
+  for (const x of [...data.tasks, ...data.trackers, ...data.lines]) {
+    const listId = 'listId' in x ? x.listId : x.folderId;
+    if (x.order !== undefined) next.set(listId, Math.max(next.get(listId) ?? 0, Math.ceil(x.order + 1e-9)));
+  }
+  const trackers = data.trackers.map((t) => (t.order !== undefined ? t : { ...t, order: take(t.folderId) }));
+  const tasks = [...data.tasks].sort((a, b) => a.createdAt - b.createdAt).reduce((m, t) => m.set(t.id, t.order !== undefined ? t : { ...t, order: take(t.listId) }), new Map<ID, Task>());
+  return { ...data, trackers, tasks: data.tasks.map((t) => tasks.get(t.id) ?? t) };
+}
+
+const WEEKDAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
+export const WEEKDAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+/** What a typed line will become: "## " a heading, "- " a note, "since …" a count, "every …" a repeat, else a to-do. */
+export function lineKind(text: string): LineKind {
+  const t = text.trim().toLowerCase();
+  if (/^#{1,3}\s/.test(t)) return 'heading';
+  if (/^-\s/.test(t)) return 'note';
+  if (/^(since|last time)\b|\bdays since\b/.test(t)) return 'since';
+  if (/\bevery\b|\bon (mon|tue|wed|thu|fri|sat|sun)[a-z]*\b|\b(daily|weekly|fortnightly|monthly)\b/.test(t)) return 'repeat';
+  return 'todo';
+}
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+
+/** A typed line read into its kind, its words, and for a repeat how often it comes due. */
+export function parseLine(text: string, kind: LineKind = lineKind(text)): { kind: LineKind; text: string; every?: { n: number; unit: RepeatUnit }; weekday?: number } {
+  const s = text.trim();
+  if (kind === 'heading') return { kind, text: s.replace(/^#{1,3}\s*/, '') || s };
+  if (kind === 'note') return { kind, text: s.replace(/^-\s*/, '') || s };
+  if (kind === 'since') return { kind, text: cap(s.replace(/^(since|last time)\s+(i\s+)?/i, '').replace(/\bdays since\b/i, '').replace(/\s{2,}/g, ' ').trim()) || s };
+  if (kind === 'repeat') {
+    const day = /\b(?:every|on)\s+(mon|tue|wed|thu|fri|sat|sun)[a-z]*\b/i.exec(s);
+    if (day) return { kind, text: cap(s.replace(day[0], '').replace(/\s{2,}/g, ' ').trim()) || s, every: { n: 1, unit: 'week' }, weekday: WEEKDAYS.indexOf(day[1].toLowerCase()) };
+    const m = /\b(?:every\s+(\d+)\s+(day|week|month)s?|every\s+(day|week|fortnight|month)|(daily|weekly|fortnightly|monthly))\b/i.exec(s);
+    let every: { n: number; unit: RepeatUnit } = { n: 1, unit: 'week' };
+    if (m) {
+      const word = (m[3] ?? m[4] ?? '').toLowerCase();
+      if (m[1]) every = { n: Number(m[1]), unit: m[2].toLowerCase() as RepeatUnit };
+      else if (/^(day|daily)$/.test(word)) every = { n: 1, unit: 'day' };
+      else if (/fortnight/.test(word)) every = { n: 2, unit: 'week' };
+      else if (/^month/.test(word)) every = { n: 1, unit: 'month' };
+    }
+    return { kind, text: cap((m ? s.replace(m[0], '') : s).replace(/\s{2,}/g, ' ').trim()) || s, every };
+  }
+  return { kind, text: cap(s) };
+}
+
+/** "weekly", "every 3 days", "every Sunday", "monthly on the 1st". */
+export function repeatText(t: TrackerItem): string {
+  if (t.weekday !== undefined) return `every ${WEEKDAY_NAMES[t.weekday]}`;
+  const e = t.every ?? { n: 1, unit: 'week' };
+  const nth = (n: number) => `${n}${n % 10 === 1 && n !== 11 ? 'st' : n % 10 === 2 && n !== 12 ? 'nd' : n % 10 === 3 && n !== 13 ? 'rd' : 'th'}`;
+  if (e.unit === 'month' && t.onDay) return `${e.n === 1 ? 'monthly' : `every ${e.n} months`} on the ${nth(t.onDay)}`;
+  if (e.n === 1) return e.unit === 'day' ? 'daily' : e.unit === 'week' ? 'weekly' : 'monthly';
+  if (e.n === 2 && e.unit === 'week') return 'fortnightly';
+  return `every ${e.n} ${e.unit}s`;
+}
+
+/** A days-since count that has gone past its aim. */
+export const pastAim = (t: TrackerItem, today: Day) => {
+  if (t.kind !== 'since' || !t.aim) return false;
+  const s = trackerStatus(t, today);
+  return s.kind === 'since' && s.days > t.aim;
+};
+
+/** The line under a page's name: what's due, and counts past their aim. */
+export function pageSummary(data: Pick<AppData, 'tasks' | 'trackers' | 'lines'>, listId: ID, today: Day): string {
+  const items = pageItems(data, listId);
+  const due = dueTrackers(items.flatMap((i) => (i.kind === 'repeat' ? [i.tracker] : [])), today).map((d) => d.item.name);
+  const over = items.flatMap((i) => (i.kind === 'since' && pastAim(i.tracker, today) ? [i.tracker] : []))
+    .map((t) => { const s = trackerStatus(t, today); return `${s.kind === 'since' ? s.days : 0} days since ${t.name.toLowerCase()}`; });
+  const parts = [due.length ? `${due.slice(0, 2).join(', ')}${due.length > 2 ? ` +${due.length - 2}` : ''} due` : '', ...over.slice(0, 1)].filter(Boolean);
+  if (parts.length) return parts.join(' · ');
+  const open = items.flatMap((i) => (i.kind === 'todo' && !i.task.done ? [i.task.title] : []));
+  if (open.length) return open.slice(0, 2).join(', ');
+  return items.length ? 'Nothing due' : 'Empty';
 }
 
 /* ---------- Milestones ---------- */

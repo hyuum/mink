@@ -1,13 +1,13 @@
 // The app's single source of truth: an immutable AppData snapshot, React subscriptions,
 // debounced saving, and the actions every screen uses to change data.
 import { useSyncExternalStore } from 'react';
-import type { AppData, Bill, Expense, Folder, ID, ListItem, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TaskList, TimeCategory, TimeEntry, TrackerItem } from './types';
-import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, LIST_ICON, defaultFolders, sampleData } from './seed';
+import type { AppData, Bill, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Settings, SpendKind, Task, TaskList, TimeCategory, TimeEntry, TrackerItem } from './types';
+import { CATEGORY_COLORS, DEFAULT_TIME_CATEGORIES, OLD_DEFAULT_COLORS, defaultData, LIST_ICON, sampleData } from './seed';
 import { iconName } from './icons';
 import { createPersistence, type Persistence, type StorageKind } from './persist';
-import { isTemplatePlan, nextDue, ownPlan, paintRange, planForDay, planRange, relinkDay, spendName, templateFor, weekdayIndex } from './logic';
+import { isTemplatePlan, nextDue, nextOrder, ownPlan, pageItems, paintRange, parseLine, planForDay, planRange, relinkDay, spendName, templateFor, weekdayIndex, withOrders } from './logic';
 import { uid } from '../lib/id';
-import { addDays, dayStartMs, msAt } from '../lib/dates';
+import { addDays, dayStartMs, msAt, todayISO } from '../lib/dates';
 import type { Day } from './types';
 
 let state: AppData = defaultData();
@@ -82,7 +82,25 @@ export function migrate(raw: unknown): AppData {
   const planned = arr(d.planned, []);
   const planDays = Array.isArray(d.planDays) ? d.planDays : Array.from(new Set(planned.map((p) => p.day)));
 
-  return {
+  // Folders (trackers, checklists, collections, wishlists) became pages, and their list items became to-dos.
+  // Collection status, stars and wishlist prices are dropped.
+  type OldFolder = { id: string; name: string; icon?: string; emoji?: string };
+  type OldItem = { id: string; folderId: string; text: string; done?: boolean; status?: string; createdAt?: number };
+  const old = raw as { folders?: OldFolder[]; listItems?: OldItem[] } | null;
+  const lists = arr(d.lists, base.lists);
+  for (const f of arr(old?.folders, [])) {
+    // An emoji from even older saves is kept for withIcon to turn into an icon below.
+    if (!lists.some((l) => l.id === f.id)) lists.push({ id: f.id, name: f.name, icon: f.icon, ...(f.emoji ? { emoji: f.emoji } : {}) } as TaskList);
+  }
+  const tasks = [
+    ...arr(d.tasks, []),
+    ...arr(old?.listItems, []).map((i): Task => {
+      const done = Boolean(i.done) || i.status === 'done';
+      return { id: i.id, title: i.text, listId: i.folderId, tags: [], priority: 0, due: null, done, doneAt: done ? i.createdAt ?? Date.now() : null, createdAt: i.createdAt ?? Date.now() };
+    }),
+  ];
+
+  return withOrders({
     version: 2,
     example: Boolean(d.example),
     timeCategories,
@@ -96,16 +114,42 @@ export function migrate(raw: unknown): AppData {
     // Spend names are kept in lower case.
     expenses: expenses.map((e) => (e.note === spendName(e.note) ? e : { ...e, note: spendName(e.note) })),
     bills,
-    // Folders, lists and trackers used to carry an emoji; they now carry an icon name.
-    lists: arr(d.lists, base.lists).map((l) => withIcon(l, LIST_ICON[l.id] ?? 'list-checks')),
-    tasks: arr(d.tasks, []),
-    folders: arr(d.folders, defaultFolders()).map((f) => withIcon(f, 'folder')),
+    // Pages and trackers used to carry an emoji; they now carry an icon name.
+    lists: lists.map((l) => withIcon(l, LIST_ICON[l.id] ?? 'list-checks')),
+    tasks,
     trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
-    listItems: arr(d.listItems, []),
+    lines: arr(d.lines, []),
     notes: arr(d.notes, []),
     // The daily time goal and stickers were removed; older saves drop them here.
     settings: { ...base.settings, ...withoutOld(d.settings), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
-  };
+  });
+}
+
+/** Adds one line of a given kind to a page, at a given place. */
+function insertLine(
+  d: AppData, listId: ID, kind: LineKind, text: string, order: number,
+  extra: { every?: TrackerItem['every']; weekday?: number; hits?: Day[]; since?: Day; id?: ID }, today: Day,
+): AppData {
+  const id = extra.id ?? uid();
+  if (kind === 'todo') return { ...d, tasks: [...d.tasks, { id, title: text, listId, tags: [], priority: 0, due: null, done: false, doneAt: null, createdAt: Date.now(), order }] };
+  if (kind === 'heading' || kind === 'note') return { ...d, lines: [...d.lines, { id, listId, kind, text, order }] };
+  const icon = d.lists.find((l) => l.id === listId)?.icon || 'sparkles';
+  const tracker: TrackerItem = { id, folderId: listId, name: text, icon, kind: kind === 'since' ? 'since' : 'every', hits: extra.hits ?? [], since: extra.since ?? today, order };
+  if (kind === 'repeat') {
+    tracker.every = extra.every ?? { n: 1, unit: 'week' };
+    if (extra.weekday !== undefined) tracker.weekday = extra.weekday;
+  }
+  return { ...d, trackers: [...d.trackers, tracker] };
+}
+
+/** A line wherever it's kept, with what's needed to move it to another kind. */
+function findLine(d: AppData, id: ID): { kind: LineKind; listId: ID; text: string; order: number; tracker?: TrackerItem } | null {
+  const task = d.tasks.find((t) => t.id === id);
+  if (task) return { kind: 'todo', listId: task.listId, text: task.title, order: task.order ?? 0 };
+  const tracker = d.trackers.find((t) => t.id === id);
+  if (tracker) return { kind: tracker.kind === 'since' ? 'since' : 'repeat', listId: tracker.folderId, text: tracker.name, order: tracker.order ?? 0, tracker };
+  const line = d.lines.find((l) => l.id === id);
+  return line ? { kind: line.kind, listId: line.listId, text: line.text, order: line.order } : null;
 }
 
 function withoutOld(s: Partial<Settings> | undefined): Partial<Settings> {
@@ -123,9 +167,9 @@ export async function initStore(): Promise<void> {
     persistence = await createPersistence();
     storageKind = persistence.kind;
     const loaded = await persistence.load();
-    state = loaded ? migrate(loaded) : sampleData();
+    state = migrate(loaded ?? sampleData());
   } catch {
-    state = sampleData();
+    state = migrate(sampleData());
   }
   ready = true;
   emit();
@@ -429,7 +473,7 @@ export const actions = {
   addTask(t: Pick<Task, 'title' | 'listId'> & Partial<Task>) {
     update((d) => ({
       ...d,
-      tasks: [...d.tasks, { tags: [], priority: 0, due: null, done: false, doneAt: null, ...t, id: uid(), createdAt: Date.now() }],
+      tasks: [...d.tasks, { tags: [], priority: 0, due: null, done: false, doneAt: null, order: nextOrder(d, t.listId), ...t, id: uid(), createdAt: Date.now() }],
     }));
   },
   updateTask(id: ID, patch: Partial<Task>) {
@@ -458,30 +502,73 @@ export const actions = {
   updateList(id: ID, patch: Partial<Omit<TaskList, 'id'>>) {
     update((d) => ({ ...d, lists: replace<TaskList>(d.lists, id, patch) }));
   },
-  /** Delete a task list and its tasks. Keeps at least one list. */
+  /** Delete a page and everything on it. Keeps at least one page. */
   deleteList(id: ID): AppData {
     const before = state;
-    update((d) => (d.lists.length < 2 ? d : { ...d, lists: remove(d.lists, id), tasks: d.tasks.filter((t) => t.listId !== id) }));
+    update((d) => (d.lists.length < 2 ? d : {
+      ...d, lists: remove(d.lists, id), tasks: d.tasks.filter((t) => t.listId !== id), trackers: d.trackers.filter((t) => t.folderId !== id), lines: d.lines.filter((l) => l.listId !== id),
+    }));
     return before;
   },
 
-  /* Folders in More: trackers, checklists, collections, wishlists */
-  addFolder(f: Omit<Folder, 'id'>): ID {
-    const id = uid();
-    update((d) => ({ ...d, folders: [...d.folders, { ...f, id }] }));
-    return id;
+  /* Lines on a page: to-dos, repeats, days-since counts, headings and notes */
+  /** Add lines typed (or pasted) at the end of a page. Each one's kind comes from how it's written unless given. */
+  addLines(listId: ID, texts: string[], kind?: LineKind) {
+    const today = todayISO();
+    update((d) => {
+      let data = d;
+      for (const raw of texts) {
+        if (!raw.trim()) continue;
+        const p = parseLine(raw, kind);
+        data = insertLine(data, listId, p.kind, p.text, nextOrder(data, listId), { every: p.every, weekday: p.weekday }, today);
+      }
+      return data;
+    });
   },
-  updateFolder(id: ID, patch: Partial<Omit<Folder, 'id' | 'type'>>) {
-    update((d) => ({ ...d, folders: replace<Folder>(d.folders, id, patch) }));
+  /** Change a line's words (its kind stays the same). */
+  editLine(id: ID, text: string) {
+    const t = text.trim();
+    if (!t) return;
+    update((d) => ({
+      ...d,
+      tasks: d.tasks.map((x) => (x.id === id ? { ...x, title: t } : x)),
+      trackers: d.trackers.map((x) => (x.id === id ? { ...x, name: t } : x)),
+      lines: d.lines.map((x) => (x.id === id ? { ...x, text: t } : x)),
+    }));
   },
-  /** Delete a folder and everything in it. */
-  deleteFolder(id: ID): AppData {
+  /** Turn a line into another kind, keeping its words and place. */
+  convertLine(id: ID, kind: LineKind) {
+    const today = todayISO();
+    update((d) => {
+      const found = findLine(d, id);
+      if (!found || found.kind === kind) return d;
+      const stripped = { ...d, tasks: remove(d.tasks, id), trackers: remove(d.trackers, id), lines: remove(d.lines, id) };
+      const t = found.tracker;
+      return insertLine(stripped, found.listId, kind, found.text, found.order, { every: t?.every, weekday: t?.weekday, hits: t?.hits, since: t?.since, id }, today);
+    });
+  },
+  /** Move a line to just before another one (or to the end), renumbering the page. */
+  moveLine(listId: ID, id: ID, beforeId: ID | null) {
+    update((d) => {
+      const ids = pageItems(d, listId).map((i) => i.id).filter((x) => x !== id);
+      const at = beforeId === null ? ids.length : Math.max(0, ids.indexOf(beforeId));
+      ids.splice(at, 0, id);
+      const order = new Map(ids.map((x, i) => [x, i]));
+      const place = <T extends { id: ID; order?: number }>(list: T[]) => list.map((x) => (order.has(x.id) ? { ...x, order: order.get(x.id)! } : x));
+      return { ...d, tasks: place(d.tasks), trackers: place(d.trackers), lines: place(d.lines) };
+    });
+  },
+  deleteLine(id: ID): AppData {
     const before = state;
-    update((d) => ({ ...d, folders: remove(d.folders, id), trackers: d.trackers.filter((t) => t.folderId !== id), listItems: d.listItems.filter((i) => i.folderId !== id) }));
+    update((d) => ({ ...d, tasks: remove(d.tasks, id), trackers: remove(d.trackers, id), lines: remove(d.lines, id) }));
     return before;
   },
+  /** Fold or unfold the lines under a heading. */
+  toggleHeading(id: ID) {
+    update((d) => ({ ...d, lines: d.lines.map((l) => (l.id === id ? { ...l, collapsed: !l.collapsed } : l)) }));
+  },
   addTracker(t: Omit<TrackerItem, 'id'>) {
-    update((d) => ({ ...d, trackers: [...d.trackers, { ...t, id: uid() }] }));
+    update((d) => ({ ...d, trackers: [...d.trackers, { ...t, order: t.order ?? nextOrder(d, t.folderId), id: uid() }] }));
   },
   updateTracker(id: ID, patch: Partial<Omit<TrackerItem, 'id'>>) {
     update((d) => ({ ...d, trackers: replace<TrackerItem>(d.trackers, id, patch) }));
@@ -504,34 +591,6 @@ export const actions = {
   hitTracker(id: ID, day: string): AppData {
     const before = state;
     update((d) => ({ ...d, trackers: d.trackers.map((t) => (t.id === id && !t.hits.includes(day) ? { ...t, hits: [...t.hits, day].sort() } : t)) }));
-    return before;
-  },
-  addListItem(i: Omit<ListItem, 'id' | 'createdAt'>) {
-    update((d) => ({ ...d, listItems: [...d.listItems, { ...i, id: uid(), createdAt: Date.now() }] }));
-  },
-  updateListItem(id: ID, patch: Partial<Omit<ListItem, 'id'>>) {
-    update((d) => ({ ...d, listItems: replace<ListItem>(d.listItems, id, patch) }));
-  },
-  deleteListItem(id: ID): AppData {
-    const before = state;
-    update((d) => ({ ...d, listItems: remove(d.listItems, id) }));
-    return before;
-  },
-  clearTicked(folderId: ID): AppData {
-    const before = state;
-    update((d) => ({ ...d, listItems: d.listItems.filter((i) => !(i.folderId === folderId && i.done)) }));
-    return before;
-  },
-  /** Buy something from a wishlist: logs it as a "want" expense today and takes it off the list. */
-  buyWish(id: ID, today: string): AppData {
-    const before = state;
-    const item = state.listItems.find((i) => i.id === id);
-    if (!item) return before;
-    update((d) => ({
-      ...d,
-      listItems: remove(d.listItems, id),
-      expenses: [...d.expenses, { id: uid(), amount: item.price ?? 0, kind: 'want', tags: ['wishlist'], note: spendName(item.text), day: today, createdAt: Date.now() }],
-    }));
     return before;
   },
   renameList(id: ID, name: string) {
@@ -573,10 +632,10 @@ export const actions = {
   },
   /** Start fresh: keep categories, lists and settings, clear every record. */
   startFresh() {
-    update((d) => ({ ...d, example: false, entries: [], planned: [], planDays: [], milestones: [], expenses: [], bills: [], tasks: [], trackers: [], listItems: [] }));
+    update((d) => ({ ...d, example: false, entries: [], planned: [], planDays: [], milestones: [], expenses: [], bills: [], tasks: [], trackers: [], lines: [] }));
   },
   loadExample() {
-    const s = sampleData();
+    const s = migrate(sampleData());
     set({ ...s, settings: state.settings });
   },
   importData(raw: unknown): boolean {
