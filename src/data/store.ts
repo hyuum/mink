@@ -316,12 +316,18 @@ export const actions = {
 
   /* Phone tracking */
   /** Approve phone-use suggestions as logged blocks. */
-  approvePhone(items: { key: string; start: number; end: number; categoryId: ID; label: string }[]): AppData {
+  /** Log approved phone use as blocks. A name typed for a stretch is remembered for its main app next time. */
+  approvePhone(items: { key: string; start: number; end: number; categoryId: ID; label: string; pkg?: string; remember?: boolean }[]): AppData {
     const before = state;
-    update((d) => ({
-      ...d,
-      entries: [...d.entries, ...items.map((x) => ({ id: uid(), label: x.label, categoryId: x.categoryId, start: x.start, end: x.end, source: 'device' as const, deviceKey: x.key }))],
-    }));
+    update((d) => {
+      const names = { ...d.settings.phone.names };
+      for (const x of items) if (x.pkg && x.remember) { if (x.label) names[x.pkg] = x.label; else delete names[x.pkg]; }
+      return {
+        ...d,
+        entries: [...d.entries, ...items.map((x) => ({ id: uid(), label: x.label, categoryId: x.categoryId, start: x.start, end: x.end, source: 'device' as const, deviceKey: x.key }))],
+        settings: { ...d.settings, phone: { ...d.settings.phone, names } },
+      };
+    });
     return before;
   },
   /** Log spends suggested from bank notifications, and remember each merchant's choices for next time. */

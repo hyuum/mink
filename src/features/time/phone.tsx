@@ -2,7 +2,7 @@
 // You review them (one at a time, or all at once) and approve or dismiss them. Settings live in More.
 import { useEffect, useMemo, useState } from 'react';
 import { actions, useData } from '../../data/store';
-import { phoneCategory, phoneSuggestions, type PhoneSession, type PhoneSuggestion } from '../../data/logic';
+import { phoneBlockName, phoneCategory, phoneSuggestions, type PhoneSession, type PhoneSuggestion } from '../../data/logic';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayStartMs, fmtDuration, fmtHM, minutesOfDay } from '../../lib/dates';
 import { hasPhoneAccess, openPhoneAccessSettings, phoneAvailable, phoneSessions } from '../../lib/phone';
@@ -53,12 +53,18 @@ export function PhoneReview({ open, suggestions, focus, cats, onClose }: {
 }
 
 function ReviewBody({ suggestions, cats, onClose }: { suggestions: PhoneSuggestion[]; cats: TimeCategory[]; onClose: () => void }) {
+  const p = useData().settings.phone;
   const [ticked, setTicked] = useState<Set<string>>(() => new Set(suggestions.map((s) => s.key)));
   const [cat, setCat] = useState<Record<string, ID>>(() => Object.fromEntries(suggestions.map((s) => [s.key, s.categoryId])));
+  const [name, setName] = useState<Record<string, string>>(() => Object.fromEntries(suggestions.map((s) => [s.key, phoneBlockName(p, s)])));
+  // Names you typed here are remembered for the stretch's main app.
+  const [typed, setTyped] = useState<Set<string>>(() => new Set());
   const chosen = suggestions.filter((s) => ticked.has(s.key));
   const toggle = (k: string) => setTicked((t) => { const n = new Set(t); if (n.has(k)) n.delete(k); else n.add(k); return n; });
   const approve = () => {
-    const before = actions.approvePhone(chosen.map((s) => ({ key: s.key, start: s.start, end: s.end, categoryId: cat[s.key], label: s.apps[0]?.label ?? 'Phone' })));
+    const before = actions.approvePhone(chosen.map((s) => ({
+      key: s.key, start: s.start, end: s.end, categoryId: cat[s.key], label: name[s.key].trim(), pkg: s.apps[0]?.pkg, remember: typed.has(s.key),
+    })));
     showToast(`Approved ${chosen.length} · ${fmtDuration(chosen.reduce((t, s) => t + (s.end - s.start) / 60_000, 0))}`, before);
     onClose();
   };
@@ -85,6 +91,9 @@ function ReviewBody({ suggestions, cats, onClose }: { suggestions: PhoneSuggesti
             <select aria-label="Counts as" value={cat[s.key]} onChange={(e) => setCat({ ...cat, [s.key]: e.target.value })}>
               {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
+            <input className="phone-name" value={name[s.key]} autoComplete="off" enterKeyHint="done"
+              placeholder={`Name (shows as ${cats.find((c) => c.id === cat[s.key])?.name ?? 'the activity'})`} aria-label="Name for this block"
+              onChange={(e) => { setName({ ...name, [s.key]: e.target.value }); setTyped((t) => new Set(t).add(s.key)); }} />
           </div>
         ))}
       </div>
@@ -144,6 +153,12 @@ export function PhoneSettingsCard() {
     );
   }
   const setApp = (pkg: string, v: string) => actions.updatePhoneSettings({ apps: { ...p.apps, [pkg]: v === '' ? null : v } });
+  // An empty name goes back to the default (the app's name, or the activity's).
+  const setName = (pkg: string, v: string) => {
+    const names = { ...p.names };
+    if (v.trim()) names[pkg] = v; else delete names[pkg];
+    actions.updatePhoneSettings({ names });
+  };
   return (
     <Card title="Phone tracking">
       <div className="stack">
@@ -151,6 +166,12 @@ export function PhoneSettingsCard() {
           <input id="phone-on" type="checkbox" checked={p.enabled} onChange={(e) => actions.updatePhoneSettings({ enabled: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />
           Suggest blocks from phone use
         </label>
+        {p.enabled && (
+          <label className="row" htmlFor="phone-name-app" style={{ minHeight: 40, gap: 10, fontSize: 14 }}>
+            <input id="phone-name-app" type="checkbox" checked={p.nameAfterApp} onChange={(e) => actions.updatePhoneSettings({ nameAfterApp: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--done)' }} />
+            <span>Name blocks after the app<small className="muted" style={{ display: 'block', fontSize: 12 }}>Off: they show their activity (Drift, Rest…). Your own name for an app, below, always wins.</small></span>
+          </label>
+        )}
         {p.enabled && access === false && (
           <div className="phone-access">
             <p className="small">Turn on <b>Usage access</b> for Matcha Planner so it can see which app was open and when. It never sees what you did inside an app.</p>
@@ -191,6 +212,9 @@ export function PhoneSettingsCard() {
                       {cats.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
                       <option value="">Don't count</option>
                     </select>
+                    <input className="phone-name" value={p.names[a.pkg] ?? ''} autoComplete="off" aria-label={`Name for ${a.label} blocks`}
+                      placeholder={p.nameAfterApp ? `Blocks named “${a.label}”` : `Blocks named after their activity`}
+                      onChange={(e) => setName(a.pkg, e.target.value)} />
                   </div>
                 ))}
               </div>

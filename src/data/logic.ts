@@ -194,6 +194,13 @@ export interface PhoneSuggestion {
   apps: { pkg: string; label: string; min: number }[];
 }
 
+/** What a stretch is called when approved: your name for its main app, else the app (if that's on), else nothing (the activity's name shows). */
+export const phoneBlockName = (p: PhoneSettings, s: Pick<PhoneSuggestion, 'apps'>) => {
+  const top = s.apps[0];
+  if (!top) return '';
+  return p.names?.[top.pkg] ?? (p.nameAfterApp ? top.label : '');
+};
+
 /** The activity an app counts as, or null when it doesn't count. */
 export const phoneCategory = (s: PhoneSettings, pkg: string): ID | null => (pkg in s.apps ? s.apps[pkg] : s.defaultCategoryId);
 

@@ -183,6 +183,10 @@ export interface PhoneSettings {
   defaultCategoryId: ID | null;
   /** Per app (Android package name): the activity it counts as, or null to not count it. */
   apps: Record<string, ID | null>;
+  /** Name approved blocks after the app ("Instagram"); off, they show their activity's name. */
+  nameAfterApp: boolean;
+  /** Per app: your own name for its blocks ("scrolling"), used instead of the app's or activity's. */
+  names: Record<string, string>;
 }
 
 /** Spends suggested from bank notifications, in the Android app. */

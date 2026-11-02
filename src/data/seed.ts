@@ -55,6 +55,7 @@ export function defaultPhoneSettings(): PhoneSettings {
   return {
     enabled: false, minMin: 5, gapMin: 2, defaultCategoryId: 'drift',
     apps: Object.fromEntries([...drift.map((p) => [p, 'drift']), ...ignore.map((p) => [p, null])]),
+    nameAfterApp: false, names: {},
   };
 }
 

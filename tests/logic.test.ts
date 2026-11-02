@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankPattern, bankSuggestions, bonusFor, dailies, dayCoverage, streakBefore, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankPattern, phoneBlockName, bankSuggestions, bonusFor, dailies, dayCoverage, streakBefore, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry, TrackerItem } from '../src/data/types.ts';
@@ -464,4 +464,12 @@ test('bank notifications with the same wording but different amounts, or the sam
   ];
   // d is the bank posting c again a minute later; the rest are real.
   assert.deepEqual(bankSuggestions(notes, [], {}, [], day).map((s) => s.key), ['c', 'b', 'a']);
+});
+
+test('phone blocks are named by your name for the app, else the app (if on), else nothing', () => {
+  const s = { apps: [{ pkg: 'com.instagram.android', label: 'Instagram', min: 40 }] };
+  const base = defaultData().settings.phone;
+  assert.equal(phoneBlockName(base, s), '');
+  assert.equal(phoneBlockName({ ...base, nameAfterApp: true }, s), 'Instagram');
+  assert.equal(phoneBlockName({ ...base, nameAfterApp: true, names: { 'com.instagram.android': 'scrolling' } }, s), 'scrolling');
 });
