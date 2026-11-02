@@ -58,15 +58,6 @@ export function defaultPhoneSettings(): PhoneSettings {
   };
 }
 
-export const MILESTONE_KINDS: { kind: MilestoneKind; name: string }[] = [
-  { kind: 'wake', name: 'Wake up' },
-  { kind: 'leave', name: 'Leave home' },
-  { kind: 'arrive', name: 'Arrive' },
-  { kind: 'lunch', name: 'Lunch' },
-  { kind: 'home', name: 'Home' },
-  { kind: 'bed', name: 'Bed' },
-];
-
 export function defaultData(): AppData {
   return {
     version: 2,

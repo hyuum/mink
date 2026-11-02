@@ -77,8 +77,8 @@ function dismissAll(suggestions: BankSuggestion[]) {
 
 function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; onClose: () => void }) {
   const today = todayISO();
-  // Anything that looks already logged by hand starts unticked.
-  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(suggestions.map((s) => [s.key, { on: !s.logged, note: s.note, kind: s.kind }])));
+  // Everything starts unticked: you tick the real spends.
+  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(suggestions.map((s) => [s.key, { on: false, note: s.note, kind: s.kind }])));
   const set = (key: string, patch: Partial<Row>) => setRows((r) => ({ ...r, [key]: { ...r[key], ...patch } }));
   // Which spend's original notification is showing.
   const [shown, setShown] = useState<string | null>(null);
@@ -100,7 +100,7 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
     <div className="stack" style={{ gap: 12 }}>
       <div>
         <h2>Spends to review</h2>
-        <p className="small muted">Untick any you don't want logged. Tap a name to change it; next time that shop starts with your name and need or want.</p>
+        <p className="small muted">Tick the real spends, then approve them. Tap a name to change it; next time that shop starts with your name and need or want.</p>
       </div>
       <div className="bank-list">
         {suggestions.map((s) => {

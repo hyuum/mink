@@ -1,7 +1,6 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
 import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, Rewards, SpendKind, Task, TextLine, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
-import { MILESTONE_KINDS } from './seed';
 
 /* ---------- Time ---------- */
 
@@ -508,13 +507,6 @@ export const bonusFor = (streak: number) => 20 + Math.min(10, streak * 2);
 
 /* ---------- Milestones ---------- */
 
-export const milestoneName = (m: Pick<Milestone, 'kind' | 'label'>) =>
-  m.kind === 'custom' ? m.label || 'Milestone' : MILESTONE_KINDS.find((k) => k.kind === m.kind)?.name ?? m.kind;
-
-export function milestonesForDay(ms: Milestone[], day: Day): Milestone[] {
-  return ms.filter((m) => m.day === day).sort((a, b) => a.min - b.min);
-}
-
 export const wakeOf = (ms: Milestone[], day: Day) => ms.find((m) => m.day === day && m.kind === 'wake');
 export const bedOf = (ms: Milestone[], day: Day) => ms.find((m) => m.day === day && m.kind === 'bed');
 
@@ -522,9 +514,6 @@ export const bedOf = (ms: Milestone[], day: Day) => ms.find((m) => m.day === day
 export function avgMin(values: number[]): number | null {
   return values.length ? Math.round(values.reduce((s, v) => s + v, 0) / values.length) : null;
 }
-
-/** A bedtime typed as an early-morning clock time (before noon) means after midnight. */
-export const bedMinFromClock = (clockMin: number) => (clockMin < 12 * 60 ? clockMin + 24 * 60 : clockMin);
 
 export function runningEntry(entries: TimeEntry[]): TimeEntry | undefined {
   return entries.find((e) => e.end === null);
@@ -820,8 +809,10 @@ export function bankSuggestions(
     if (!p || ignored.has(bankPattern(n.title, n.text))) continue;
     const textKey = `${n.pkg}|${n.title}|${n.text}`;
     const spendKey = `${p.amount}|${p.merchant}`;
-    // The very same words within a day, or the same amount at the same shop within 10 minutes.
-    const repeat = (lastText.has(textKey) && n.postedAt - lastText.get(textKey)! < 86_400_000)
+    // A repeat is the very same words, amount included, within 3 hours (a notification posted again), or the
+    // same amount at the same shop within 10 minutes. Same wording with a different amount is always a new spend,
+    // and so is the same coffee bought again later in the day.
+    const repeat = (lastText.has(textKey) && n.postedAt - lastText.get(textKey)! < 3 * 3_600_000)
       || (lastSpend.has(spendKey) && n.postedAt - lastSpend.get(spendKey)! < 10 * 60_000);
     lastText.set(textKey, n.postedAt);
     lastSpend.set(spendKey, n.postedAt);

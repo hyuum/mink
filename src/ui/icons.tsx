@@ -13,8 +13,6 @@ export const IconClock = (p: P) => <S {...p}><circle cx="12" cy="12" r="8" /><pa
 export const IconPlus = (p: P) => <S {...p}><path d="M12 5v14M5 12h14" /></S>;
 export const IconWallet = (p: P) => <S {...p}><rect x="3" y="6" width="18" height="13" rx="3" /><path d="M3 10h18M16 15h2" /></S>;
 export const IconMore = (p: P) => <S {...p}><circle cx="5" cy="12" r="1" /><circle cx="12" cy="12" r="1" /><circle cx="19" cy="12" r="1" /></S>;
-export const IconTasks = (p: P) => <S {...p}><rect x="4" y="5" width="5" height="5" rx="1.5" /><rect x="4" y="14" width="5" height="5" rx="1.5" /><path d="M13 7.5h7M13 16.5h7" /></S>;
-export const IconPause = (p: P) => <S {...p}><path d="M9 6v12M15 6v12" /></S>;
 export const IconStop = (p: P) => <S {...p}><rect x="7" y="7" width="10" height="10" rx="2" /></S>;
 export const IconPlay = (p: P) => <S {...p} fill="currentColor"><path d="M8 5.5v13l10.5-6.5z" stroke="none" /></S>;
 export const IconCheck = (p: P) => <S {...p}><path d="M5 12l4 4 10-10" /></S>;
@@ -38,14 +36,12 @@ export const IconSun = (p: P) => <S {...p}><circle cx="12" cy="12" r="4" /><path
 export const IconLeave = (p: P) => <S {...p}><path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h9" /></S>;
 export const IconPin = (p: P) => <S {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.2" /></S>;
 export const IconLunch = (p: P) => <S {...p}><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 21V3c-2.2 1.2-3 3.8-3 7h3" /></S>;
-export const IconBus = (p: P) => <S {...p}><rect x="5" y="3.5" width="14" height="14" rx="3" /><path d="M5 10.5h14M8 17.5v3M16 17.5v3M8.5 14h.01M15.5 14h.01" /></S>;
 export const IconTrash = (p: P) => <S {...p}><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" /></S>;
 export const IconArrowDown = (p: P) => <S {...p}><path d="M12 4v15M6 13l6 6 6-6" /></S>;
 export const IconEye = (p: P) => <S {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></S>;
 export const IconPencil = (p: P) => <S {...p}><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z" /><path d="M13.5 7l3 3" /></S>;
 export const IconPhone = (p: P) => <S {...p}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></S>;
 export const IconMoon = (p: P) => <S {...p}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></S>;
-export const IconFlag = (p: P) => <S {...p}><path d="M5 21V4M5 4h11l-2.5 4L16 12H5" /></S>;
 export const IconStar = (p: P) => <S {...p}><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" /></S>;
 export const IconEraser = (p: P) => <S {...p}><path d="M16 3l5 5-10 10H6l-3-3z" /><path d="M11 18h9" /></S>;
 export const IconLabels = (p: P) => <S {...p}><circle cx="5" cy="7" r="2" /><circle cx="5" cy="17" r="2" /><path d="M10 7h10M10 17h10" /></S>;

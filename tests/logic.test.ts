@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankPattern, bankSuggestions, bedMinFromClock, bonusFor, dailies, dayCoverage, streakBefore, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankPattern, bankSuggestions, bonusFor, dailies, dayCoverage, streakBefore, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry, TrackerItem } from '../src/data/types.ts';
@@ -157,15 +157,9 @@ test('weekly allowance, need/want split and month = 4 weeks', () => {
   assert.equal(m.weeks.reduce((s, x) => s + x.total, 0), 4700);
 });
 
-test('milestones: names, ordering, bedtimes past midnight', () => {
-  assert.equal(milestoneName({ kind: 'wake', label: '' }), 'Wake up');
-  assert.equal(milestoneName({ kind: 'custom', label: 'Meds' }), 'Meds');
-  assert.equal(bedMinFromClock(30), 24 * 60 + 30);
-  assert.equal(bedMinFromClock(23 * 60), 23 * 60);
+test('milestones: bedtimes past midnight average sensibly', () => {
   assert.equal(avgMin([23 * 60, 25 * 60]), 24 * 60); // 11 pm and 1 am average to midnight
   assert.equal(avgMin([]), null);
-  const ms = [{ id: 'b', kind: 'bed' as const, label: '', day: '2026-10-12', min: 1470 }, { id: 'w', kind: 'wake' as const, label: '', day: '2026-10-12', min: 430 }];
-  assert.deepEqual(milestonesForDay(ms, '2026-10-12').map((m) => m.id), ['w', 'b']);
   const s = sampleData(msAt('2026-10-12', 20 * 60));
   assert.ok(s.milestones.some((m) => m.kind === 'wake' && m.day === '2026-10-12'));
   assert.ok(!s.milestones.some((m) => m.kind === 'bed' && m.day === '2026-10-12')); // not bedtime yet
@@ -456,4 +450,18 @@ test('bank notifications: ads, offers and repeats are not spends; "never show on
   // Ignoring one wording hides it whatever the amount.
   const pattern = bankPattern('Purchase', 'Purchase of $99.99 at Kiosk');
   assert.deepEqual(bankSuggestions(notes, [], {}, [], day, [pattern]).map((s) => s.key), ['a']);
+});
+
+test('bank notifications with the same wording but different amounts, or the same spend later in the day, all stay', () => {
+  const day = () => '2026-10-22';
+  const hour = 3_600_000;
+  const note = (key: string, text: string, postedAt: number) => ({ key, pkg: 'bank', label: 'Bank', title: 'Purchase', text, postedAt });
+  const notes = [
+    note('a', 'Purchase of $6.50 at Mugi Cafe', 0),
+    note('b', 'Purchase of $4.20 at Mugi Cafe', 20 * 60_000),
+    note('c', 'Purchase of $6.50 at Mugi Cafe', 5 * hour),
+    note('d', 'Purchase of $6.50 at Mugi Cafe', 5 * hour + 60_000),
+  ];
+  // d is the bank posting c again a minute later; the rest are real.
+  assert.deepEqual(bankSuggestions(notes, [], {}, [], day).map((s) => s.key), ['c', 'b', 'a']);
 });

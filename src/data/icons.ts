@@ -72,8 +72,5 @@ export function iconName(v: string | undefined, fallback = 'list-checks'): strin
   return (e && FROM_EMOJI[e]) || fallback;
 }
 
-export const TRACKER_ICONS = ['sparkles', 'user', 'users', 'message-circle', 'phone', 'cake', 'heart', 'shirt', 'washing-machine', 'sprout', 'brush', 'droplets',
-  'shower-head', 'refrigerator', 'bed-double', 'bath', 'banknote', 'pill', 'dumbbell', 'footprints', 'bike', 'smartphone', 'cup-soda', 'coffee', 'wine',
-  'cigarette', 'scissors', 'car', 'utensils', 'moon'];
 export const FOLDER_ICONS = ['folder', 'list-checks', 'users', 'message-circle', 'sprout', 'calendar-check', 'house', 'shopping-cart', 'book-open', 'gift', 'soup', 'apple', 'clapperboard', 'plane',
   'paw-print', 'music', 'graduation-cap', 'briefcase', 'leaf', 'heart', 'star', 'flame'];
