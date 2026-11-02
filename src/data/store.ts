@@ -353,6 +353,12 @@ export const actions = {
     update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ignore: [...(d.settings.bank.ignore ?? []).filter((p) => p !== pattern), pattern].slice(-200) } } }));
     return before;
   },
+  /** Lets notifications worded like this be suggested again; with no pattern, all hidden ones. */
+  unignoreBankPattern(pattern: string | null): AppData {
+    const before = state;
+    update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ignore: pattern === null ? [] : (d.settings.bank.ignore ?? []).filter((p) => p !== pattern) } } }));
+    return before;
+  },
   updateBankSettings(patch: Partial<AppData['settings']['bank']>) {
     update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ...patch } } }));
   },

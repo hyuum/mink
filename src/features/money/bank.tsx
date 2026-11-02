@@ -221,6 +221,23 @@ export function BankSettingsCard() {
             ))}
           </div>
         )}
+        {(b.ignore?.length ?? 0) > 0 && (
+          <div className="stack" style={{ gap: 6 }}>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <p className="small muted">Hidden notifications</p>
+              <button type="button" className="card-link" onClick={() => { const before = actions.unignoreBankPattern(null); showToast('All hidden notifications can show again', before); }}>Show all again</button>
+            </div>
+            {b.ignore!.map((p) => (
+              <div key={p} className="row bank-hidden">
+                {/* The wording with its numbers taken out, as it's matched. */}
+                <span className="grow">{p.replace(/#+/g, '…')}</span>
+                <button type="button" className="icon-btn" aria-label={`Show notifications like “${p.replace(/#+/g, '…')}” again`}
+                  onClick={() => { const before = actions.unignoreBankPattern(p); showToast('That kind of notification can show again', before); }}>×</button>
+              </div>
+            ))}
+            <p className="small muted">Ones you already dismissed stay dismissed; new ones like these will be suggested again.</p>
+          </div>
+        )}
       </div>
     </Card>
   );
