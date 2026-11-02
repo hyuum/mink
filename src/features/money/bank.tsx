@@ -225,7 +225,7 @@ export function BankSettingsCard() {
           <div className="stack" style={{ gap: 6 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
               <p className="small muted">Hidden notifications</p>
-              <button type="button" className="card-link" onClick={() => { const before = actions.unignoreBankPattern(null); showToast('All hidden notifications can show again', before); }}>Show all again</button>
+              <button type="button" className="card-link" onClick={() => { const before = actions.unignoreBankPattern(null); showToast('All hidden notifications can show again', before); }}>Reset</button>
             </div>
             {b.ignore!.map((p) => (
               <div key={p} className="row bank-hidden">

@@ -50,6 +50,10 @@ interface PastName { label: string; categoryId: ID }
 /** A tap only counts if the finger lifts this soon, and not while the page is still gliding from a scroll. */
 const TAP_MS = 400;
 const GLIDE_MS = 200;
+/** Two taps this close together on an empty spot add a block there. */
+const DOUBLE_TAP_MS = 350;
+/** A gap this short (in minutes) is filled whole by a double-tap; a longer one gets an hour. */
+const SMALL_GAP = 75;
 
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
@@ -374,6 +378,30 @@ export function TimeDay() {
     });
   };
 
+  // Double-tap: the tap before, and the hint shown when a single tap isn't followed by a second.
+  const lastTap = useRef<{ t: number; y: number } | null>(null);
+  const tapHint = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(tapHint.current), []);
+  /**
+   * The block a double-tap adds at a minute: the whole gap when it's an hour or so, otherwise an hour
+   * from the tapped quarter-hour, kept inside the gap. It can be resized afterwards like any block.
+   */
+  const blockAt = (min: number): [number, number] | null => {
+    const others = planMode ? plansV : loggedV;
+    let lo = h0 * 60, hi = h1 * 60;
+    for (const b of others) {
+      if (b.startMin <= min && b.endMin > min) return null;
+      if (b.endMin <= min) lo = Math.max(lo, b.endMin);
+      if (b.startMin > min) hi = Math.min(hi, b.startMin);
+    }
+    if (hi - lo < SLOT) return null;
+    if (hi - lo <= SMALL_GAP) return [Math.ceil(lo), Math.floor(hi)];
+    let start = Math.max(lo, Math.floor(min / SLOT) * SLOT);
+    let end = start + 60;
+    if (end > hi) { end = hi; start = Math.max(lo, hi - 60); }
+    return [Math.ceil(start), Math.floor(end)];
+  };
+
   // A finger that lands while the page is still gliding is stopping the scroll, not touching the day.
   const lastScroll = useRef(0);
   useEffect(() => {
@@ -422,7 +450,23 @@ export function TimeDay() {
     if (!g) return;
     if (g.type === 'swipe') { endSwipe(e.clientX); return; }
     if (g.type === 'range') {
-      if (!g.moved) { setRange(null); if (sel) setSel(null); else showToast('Drag down the day to add some time'); return; }
+      if (!g.moved) {
+        // Double-tap an empty spot to add a block there; one tap just clears a selection.
+        const t = performance.now();
+        const prev = lastTap.current;
+        clearTimeout(tapHint.current);
+        if (prev && t - prev.t < DOUBLE_TAP_MS && Math.abs(e.clientY - prev.y) < 30) {
+          lastTap.current = null;
+          const r = blockAt(minAt(e.clientY));
+          if (r) openPick(r[0], r[1]);
+          return;
+        }
+        lastTap.current = { t, y: e.clientY };
+        setRange(null);
+        if (sel) setSel(null);
+        else tapHint.current = setTimeout(() => showToast('Double-tap to add a block, or drag down the day'), DOUBLE_TAP_MS);
+        return;
+      }
       openPick(Math.min(g.a, g.b), Math.max(g.a, g.b) + SLOT);
       return;
     }
@@ -622,7 +666,7 @@ export function TimeDay() {
 
         {!tipSeen && (
           <div className="card day-tip">
-            <p>Drag down the day to add time. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left, and swipe the date sideways to change day.</p>
+            <p>Double-tap an empty spot to add a block, or drag down the day to pick the time exactly. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left, and swipe the date sideways to change day.</p>
             <button type="button" className="btn" onClick={() => { setTipSeen(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* storage blocked */ } }}>Got it</button>
           </div>
         )}
