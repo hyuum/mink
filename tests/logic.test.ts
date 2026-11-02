@@ -223,7 +223,7 @@ test('migrate gives old saves plan days, the new palette and travel arrows', () 
   assert.equal(m.timeCategories.find((c) => c.id === 'uni')?.color, '#8DBA78');
   const t = m.timeCategories.find((c) => c.id === 'transport')!;
   assert.equal(t.color, '#123456', 'a colour you picked yourself stays');
-  assert.equal(t.arrow, true);
+  assert.equal(t.look, 'arrow', 'the old arrow switch becomes the arrow look');
 });
 
 test('deleting an activity moves its time, plans and template blocks', async () => {
@@ -244,6 +244,50 @@ test('deleting an activity moves its time, plans and template blocks', async () 
   actions.deleteTimeCategory('chores', null);
   assert.equal(getData().entries.length, 0);
   assert.equal(migrate({ version: 2, entries: [], tasks: [], timeCategories: [{ id: 'transport', name: 'Transport', color: '#A9B8A3' }] }).timeCategories[0].color, '#ADA59B');
+});
+
+test('the arrow switch becomes a look, and Drift keeps its line', () => {
+  const m = migrate({
+    version: 2, entries: [], tasks: [],
+    timeCategories: [
+      { id: 'transport', name: 'Transport', color: '#ADA59B', arrow: false },
+      { id: 'drift', name: 'Drift', color: '#B7A3C2' },
+      { id: 'x', name: 'Walks', color: '#123456', arrow: true },
+      { id: 'uni', name: 'Uni', color: '#8DBA78' },
+    ],
+  });
+  const look = (id: string) => m.timeCategories.find((c) => c.id === id)?.look;
+  assert.equal(look('transport'), undefined, 'switched off stays a plain block');
+  assert.equal(look('drift'), 'line');
+  assert.equal(look('x'), 'arrow');
+  assert.equal(look('uni'), undefined);
+  assert.ok(m.timeCategories.every((c) => !('arrow' in c)));
+});
+
+test('activities reorder, and sub-activities keep their time when removed', async () => {
+  const { actions, getData } = await import('../src/data/store.ts');
+  const d = defaultData();
+  d.entries = [];
+  actions.restore(d);
+  const ids = () => getData().timeCategories.map((c) => c.id);
+  actions.moveTimeCategory('drift', 0);
+  assert.equal(ids()[0], 'drift');
+  actions.moveTimeCategory('drift', 99);
+  assert.equal(ids().at(-1), 'drift');
+  actions.addSubActivity('uni', 'Lecture');
+  actions.addSubActivity('uni', ' lecture ');
+  const subs = getData().timeCategories.find((c) => c.id === 'uni')!.subs!;
+  assert.equal(subs.length, 1, 'no duplicate names');
+  const t0 = msAt('2026-10-12', 9 * 60);
+  actions.paint(t0, t0 + 3_600_000, 'uni', t0, '', subs[0].id);
+  actions.paint(t0 + 3_600_000, t0 + 7_200_000, 'uni', t0);
+  assert.equal(getData().entries.length, 2, 'a sub and the plain activity stay separate blocks');
+  const t = dayTotals(getData().entries, '2026-10-12', t0);
+  assert.equal(t.byCat.uni, 120);
+  assert.equal(t.bySub[subs[0].id], 60);
+  actions.deleteSubActivity('uni', subs[0].id);
+  assert.ok(getData().entries.every((e) => e.categoryId === 'uni' && !e.subId));
+  actions.restore(d);
 });
 
 test('phone sessions become suggestions: ignored apps drop, short gaps join, logged time is cut out', async () => {

@@ -29,6 +29,9 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
 
   const [label, setLabel] = useState(entry?.label ?? plan?.label ?? '');
   const [categoryId, setCategoryId] = useState(entry?.categoryId ?? plan?.categoryId ?? data.timeCategories[0]?.id ?? '');
+  const [subId, setSubId] = useState(entry?.subId ?? plan?.subId ?? '');
+  const subs = data.timeCategories.find((c) => c.id === categoryId)?.subs ?? [];
+  const sub = subs.some((x) => x.id === subId) ? subId : undefined;
   const [day, setDay] = useState(initDay);
   const [start, setStart] = useState(toTimeInput(initStart));
   const [end, setEnd] = useState(toTimeInput(Math.min(initEnd, 24 * 60 - 1)));
@@ -45,14 +48,14 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
     if (!running && t! <= s) return setError('The end time needs to be after the start time.');
     if (!day) return setError('Pick a day.');
     if (entry) {
-      actions.updateEntry(entry.id, { label: label.trim(), categoryId, start: msAt(day, s), end: running ? null : msAt(day, t!) });
+      actions.updateEntry(entry.id, { label: label.trim(), categoryId, subId: sub, start: msAt(day, s), end: running ? null : msAt(day, t!) });
     } else if (plan && planned) {
-      actions.updatePlanned(plan.id, { label: label.trim(), categoryId, day, startMin: s, endMin: t! });
+      actions.updatePlanned(plan.id, { label: label.trim(), categoryId, subId: sub, day, startMin: s, endMin: t! });
     } else if (planned) {
-      actions.addPlanned({ label: label.trim(), categoryId, day, startMin: s, endMin: t! });
+      actions.addPlanned({ label: label.trim(), categoryId, ...(sub ? { subId: sub } : {}), day, startMin: s, endMin: t! });
     } else {
       if (plan) actions.deletePlanned(plan.id);
-      actions.addEntry({ label: label.trim(), categoryId, start: msAt(day, s), end: msAt(day, t!) });
+      actions.addEntry({ label: label.trim(), categoryId, ...(sub ? { subId: sub } : {}), start: msAt(day, s), end: msAt(day, t!) });
     }
     showToast(planned ? 'Plan saved' : 'Block saved');
     onClose();
@@ -78,6 +81,10 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
         </datalist>
       </label>
       <ChipGroup label="Category" value={categoryId} onChange={setCategoryId} options={data.timeCategories.map((c) => ({ value: c.id, label: c.name, color: c.color }))} />
+      {subs.length > 0 && (
+        <ChipGroup label="Sub-activity" value={sub ?? ''} onChange={setSubId}
+          options={[{ value: '', label: 'None' }, ...subs.map((x) => ({ value: x.id, label: x.name }))]} />
+      )}
       <div className="grid2" style={{ gridTemplateColumns: running ? '1fr 1fr' : '1.3fr 1fr 1fr' }}>
         <label className="field" htmlFor="entry-day">Day<input id="entry-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} disabled={running} /></label>
         <label className="field" htmlFor="entry-start">From<input id="entry-start" type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>

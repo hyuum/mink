@@ -1,7 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { actions, useData } from '../../data/store';
 import { dayTotals, daySpend, dueTrackers, entriesForDay, entryEnd, parseTaskInput, runningEntry, tasksForToday, trackerStatus, unloggedMin, upcomingBills, weekSpend } from '../../data/logic';
-import { DRIFT_ID } from '../../data/seed';
 import { dayStartMs, fmtClock, fmtDayLong, fmtDuration, greeting, hourLabel, isoOf, relativeDay, todayISO } from '../../lib/dates';
 import { fmtMoney, fmtMoneyShort } from '../../lib/money';
 import { go, moreView, showToast, useNow } from '../../app/ui-state';
@@ -28,7 +27,7 @@ export function Home() {
   const r0 = dayStartMs(today) + s.dayStartHour * 3_600_000;
   const r1 = dayStartMs(today) + s.dayEndHour * 3_600_000;
   const pct = (ms: number) => Math.min(100, Math.max(0, ((ms - r0) / (r1 - r0)) * 100));
-  const ribbon = entriesForDay(data.entries, today, now).map((e) => ({ id: e.id, left: pct(e.start), width: pct(entryEnd(e, now)) - pct(e.start), color: cat(e.categoryId)?.color ?? '#ccc', drift: e.categoryId === DRIFT_ID })).filter((x) => x.width > 0);
+  const ribbon = entriesForDay(data.entries, today, now).map((e) => ({ id: e.id, left: pct(e.start), width: pct(entryEnd(e, now)) - pct(e.start), color: cat(e.categoryId)?.color ?? '#ccc', look: cat(e.categoryId)?.look ?? 'solid' })).filter((x) => x.width > 0);
 
   const week = weekSpend(data.expenses, today, s.weeklyAllowance, today);
   const nextBill = upcomingBills(data.bills, today)[0];
@@ -84,7 +83,7 @@ export function Home() {
         <Card title="Today" action={<button className="card-link" onClick={() => go('time')}>Fill in today</button>}>
           <p className="num big">{fmtDuration(time.total)} <span className="small muted" style={{ fontFamily: 'var(--font-body)' }}>logged</span></p>
           <div className="ribbon" role="img" aria-label={`Today from ${hourLabel(s.dayStartHour)} to ${hourLabel(s.dayEndHour)}: ${dayCats.map((c) => `${c.name} ${fmtDuration(time.byCat[c.id])}`).join(', ') || 'nothing logged yet'}`}>
-            {ribbon.map((r) => <span key={r.id} className={r.drift ? 'drift' : ''} style={{ left: `${r.left}%`, width: `${r.width}%`, background: r.color }} />)}
+            {ribbon.map((r) => <span key={r.id} className={`look-${r.look}`} style={{ left: `${r.left}%`, width: `${r.width}%`, ['--c' as string]: r.color }} />)}
             <i style={{ left: `${pct(now)}%` }} />
           </div>
           <div className="row small muted" style={{ justifyContent: 'space-between', marginTop: 4 }}>

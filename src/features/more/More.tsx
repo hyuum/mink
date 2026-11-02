@@ -1,14 +1,15 @@
 // Settings and data tools. Kept deliberately plain; the More screen gets its proper design in a later round.
-import { useEffect, useState, type ChangeEvent } from 'react';
+import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
 import { moreView, showToast } from '../../app/ui-state';
-import { Band, Card, ChipGroup } from '../../ui/kit';
-import { IconArrowDown, IconTrash } from '../../ui/icons';
+import { Band, Card, ChipGroup, Sheet } from '../../ui/kit';
+import { IconGrip, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
 import { PhoneSettingsCard } from '../time/phone';
 import { BankSettingsCard } from '../money/bank';
 import { phoneAvailable } from '../../lib/phone';
-import type { TimeCategory } from '../../data/types';
+import type { BlockLook, TimeCategory } from '../../data/types';
+import { LOOKS, lookOf } from '../../data/logic';
 
 const STORAGE_TEXT = {
   indexeddb: 'Saved on this device.',
@@ -88,8 +89,8 @@ export function Settings({ page }: { page: SettingsPage }) {
 
         {page === 'time' && <><Card title="Activities">
           <div className="stack">
-            <p className="small muted">Tap a colour dot to change it. The arrow button draws an activity as a thin arrow on the day, like travel.</p>
-            {data.timeCategories.map((c) => <CategoryRow key={c.id} c={c} all={data.timeCategories} />)}
+            <p className="small muted">Drag the handle to reorder: the picker follows this order. Tap a colour dot to change it, the swatch to change how its blocks look, and "sub" to split it into finer activities.</p>
+            <ActivityList cats={data.timeCategories} />
             <form className="row" onSubmit={(e) => { e.preventDefault(); if (newCat.trim()) { actions.addTimeCategory(newCat.trim()); setNewCat(''); } }}>
               <label htmlFor="new-tc" className="sr-only">New category</label>
               <input id="new-tc" value={newCat} onChange={(e) => setNewCat(e.target.value)} placeholder="New category" className="grow" style={{ minHeight: 40, border: '1.5px dashed var(--line)', borderRadius: 10, padding: '0 10px', background: 'transparent', color: 'var(--ink)', fontSize: 15 }} />
@@ -210,9 +211,63 @@ function builtLabel() {
 }
 
 /** One activity: colour, name, drawn as an arrow or a block, and delete (moving its time somewhere else). */
-function CategoryRow({ c, all }: { c: TimeCategory; all: TimeCategory[] }) {
+/** The activities, reordered by dragging a row's handle (or with the arrow keys on it). */
+function ActivityList({ cats }: { cats: TimeCategory[] }) {
+  const list = useRef<HTMLDivElement>(null);
+  const drag = useRef<{ id: string; pointer: number } | null>(null);
+  const [lifted, setLifted] = useState<string | null>(null);
+  const onDown = (e: RPointerEvent<HTMLDivElement>) => {
+    const g = (e.target as HTMLElement).closest<HTMLElement>('[data-grip]');
+    if (!g || e.button > 0) return;
+    e.preventDefault();
+    // Captured on the list, which stays put while the rows move around under the finger.
+    list.current?.setPointerCapture(e.pointerId);
+    drag.current = { id: g.dataset.grip!, pointer: e.pointerId };
+    setLifted(g.dataset.grip!);
+  };
+  const onMove = (e: RPointerEvent<HTMLDivElement>) => {
+    const d = drag.current;
+    if (!d || !list.current) return;
+    const rows = [...list.current.querySelectorAll<HTMLElement>('[data-cat]')];
+    let to = rows.findIndex((r) => { const b = r.getBoundingClientRect(); return e.clientY < b.top + b.height / 2; });
+    if (to === -1) to = rows.length - 1;
+    const from = rows.findIndex((r) => r.dataset.cat === d.id);
+    if (to !== from && to >= 0) actions.moveTimeCategory(d.id, to);
+  };
+  const onUp = () => { drag.current = null; setLifted(null); };
+  return (
+    <div ref={list} className="stack" style={{ gap: 6 }} onPointerDown={onDown} onPointerMove={onMove} onPointerUp={onUp} onPointerCancel={onUp}>
+      {cats.map((c, i) => <CategoryRow key={c.id} c={c} all={cats} index={i} lifted={lifted === c.id} />)}
+    </div>
+  );
+}
+
+function LookSheet({ c, onClose }: { c: TimeCategory; onClose: () => void }) {
+  const set = (look: BlockLook) => { actions.updateTimeCategory(c.id, { look: look === 'solid' ? undefined : look }); onClose(); };
+  return (
+    <Sheet open onClose={onClose} label={`How ${c.name} looks`}>
+      <h2 style={{ fontSize: 20 }}>How {c.name} looks</h2>
+      <p className="small muted">How its blocks are drawn on the day, the week and the dial.</p>
+      <div className="look-grid" role="radiogroup" aria-label={`Look for ${c.name}`}>
+        {LOOKS.map((l) => (
+          <button key={l.id} type="button" role="radio" aria-checked={lookOf(c) === l.id} className="look-opt" onClick={() => set(l.id)}>
+            <span className={`look-sw look-${l.id}`} style={{ ['--c' as string]: c.color }} aria-hidden="true" />
+            <b>{l.name}</b>
+            <small>{l.hint}</small>
+          </button>
+        ))}
+      </div>
+    </Sheet>
+  );
+}
+
+function CategoryRow({ c, all, index, lifted }: { c: TimeCategory; all: TimeCategory[]; index: number; lifted: boolean }) {
   const data = useData();
   const [colours, setColours] = useState(false);
+  const [looks, setLooks] = useState(false);
+  const [subsOpen, setSubsOpen] = useState(false);
+  const [newSub, setNewSub] = useState('');
+  const subs = c.subs ?? [];
   const [deleting, setDeleting] = useState(false);
   const others = all.filter((x) => x.id !== c.id);
   const [moveTo, setMoveTo] = useState<string>(others[0]?.id ?? '');
@@ -224,12 +279,23 @@ function CategoryRow({ c, all }: { c: TimeCategory; all: TimeCategory[] }) {
     showToast(used && moveTo ? `Deleted ${c.name}. Its time moved to ${all.find((x) => x.id === moveTo)?.name}.` : `Deleted ${c.name}`, before);
   };
   return (
-    <div className="cat-row">
+    <div className={`cat-row ${lifted ? 'lifted' : ''}`} data-cat={c.id}>
       <div className="row">
+        <button type="button" className="cat-grip" data-grip={c.id} aria-label={`Move ${c.name} (arrow keys)`}
+          onKeyDown={(e) => {
+            const step = e.key === 'ArrowUp' ? -1 : e.key === 'ArrowDown' ? 1 : 0;
+            if (!step) return;
+            e.preventDefault();
+            actions.moveTimeCategory(c.id, index + step);
+            requestAnimationFrame(() => document.querySelector<HTMLElement>(`[data-grip="${c.id}"]`)?.focus());
+          }}><IconGrip size={18} /></button>
         <button type="button" className="cat-dot" style={{ background: c.color }} aria-label={`Colour for ${c.name}`} aria-expanded={colours} onClick={() => setColours(!colours)} />
         <label className="sr-only" htmlFor={`tc-${c.id}`}>Name</label>
         <input id={`tc-${c.id}`} defaultValue={c.name} onBlur={(e) => e.target.value.trim() && actions.renameTimeCategory(c.id, e.target.value.trim())} className="grow cat-name" />
-        <button type="button" className="icon-btn cat-tool" aria-pressed={Boolean(c.arrow)} aria-label={`Draw ${c.name} as an arrow`} title="Draw as an arrow" onClick={() => actions.updateTimeCategory(c.id, { arrow: !c.arrow })}><IconArrowDown size={18} /></button>
+        <button type="button" className="cat-subs" aria-expanded={subsOpen} onClick={() => setSubsOpen(!subsOpen)}>{subs.length ? `${subs.length} sub` : '+ sub'}</button>
+        <button type="button" className="cat-look" aria-label={`${c.name} look: ${LOOKS.find((l) => l.id === lookOf(c))?.name}. Change`} onClick={() => setLooks(true)}>
+          <span className={`look-sw look-${lookOf(c)}`} style={{ ['--c' as string]: c.color }} aria-hidden="true" />
+        </button>
         {others.length > 0 && <button type="button" className="icon-btn cat-tool" aria-label={`Delete ${c.name}`} aria-expanded={deleting} onClick={() => setDeleting(!deleting)}><IconTrash size={18} /></button>}
       </div>
       {colours && (
@@ -240,6 +306,20 @@ function CategoryRow({ c, all }: { c: TimeCategory; all: TimeCategory[] }) {
           ))}
         </div>
       )}
+      {subsOpen && (
+        <div className="cat-subs-list">
+          {subs.map((s) => (
+            <span key={s.id} className="sub-chip" style={{ ['--c' as string]: c.color }}>
+              {s.name}
+              <button type="button" aria-label={`Remove ${s.name}`} onClick={() => { const before = actions.deleteSubActivity(c.id, s.id); showToast(`Removed ${s.name}. Its time stays under ${c.name}.`, before); }}>×</button>
+            </span>
+          ))}
+          <form onSubmit={(e) => { e.preventDefault(); if (newSub.trim()) { actions.addSubActivity(c.id, newSub); setNewSub(''); } }}>
+            <input className="sub-add" value={newSub} onChange={(e) => setNewSub(e.target.value)} placeholder="+ add" aria-label={`Add a sub-activity to ${c.name}`} enterKeyHint="done" />
+          </form>
+        </div>
+      )}
+      {looks && <LookSheet c={c} onClose={() => setLooks(false)} />}
       {deleting && (
         <div className="cat-delete">
           {used > 0 ? (

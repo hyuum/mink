@@ -2,7 +2,6 @@
 // Tap the labels button to open it into named chips (remembered on this device).
 import { useEffect } from 'react';
 import { useData } from '../../data/store';
-import { DRIFT_ID } from '../../data/seed';
 import { ERASE, brush as brushStore, dockLabels, setDockLabels } from '../../app/ui-state';
 import { IconClose, IconDots, IconEraser, IconLabels } from '../../ui/icons';
 
@@ -32,7 +31,7 @@ export function PaintDock() {
         <div className="dock-colors">
           {cats.map((c) => (
             <button
-              key={c.id} type="button" className={`dock-btn ${c.id === DRIFT_ID ? 'is-drift' : ''}`} aria-pressed={brush === c.id}
+              key={c.id} type="button" className={`dock-btn ${c.look === 'hatch' ? 'is-hatch' : ''}`} aria-pressed={brush === c.id}
               aria-label={labels ? undefined : `Paint with ${c.name}`} title={c.name} onClick={() => pick(c.id)}
               style={labels && brush === c.id ? { background: `color-mix(in srgb, ${c.color} 40%, var(--card))`, borderColor: c.color } : undefined}
             >

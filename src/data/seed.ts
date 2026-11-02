@@ -11,13 +11,13 @@ export const DEFAULT_TIME_CATEGORIES: TimeCategory[] = [
   { id: 'uni', name: 'Uni', color: '#8DBA78' },
   { id: 'work', name: 'Work', color: '#6E9A5E' },
   { id: 'friends', name: 'Friends', color: '#EE9BB2' },
-  { id: 'transport', name: 'Transport', color: '#ADA59B', arrow: true },
+  { id: 'transport', name: 'Transport', color: '#ADA59B', look: 'arrow' },
   { id: 'meals', name: 'Meals', color: '#F4DDB0' },
   { id: 'health', name: 'Exercise', color: '#E58AA6' },
   { id: 'chores', name: 'Chores', color: '#BFD6A9' },
   { id: 'rest', name: 'Rest', color: '#DCE8CF' },
   { id: 'personal', name: 'Me time', color: '#F6C3D1' },
-  { id: 'drift', name: 'Drift', color: '#B7A3C2' },
+  { id: 'drift', name: 'Drift', color: '#B7A3C2', look: 'line' },
 ];
 
 /** Colours earlier versions used by default, so saves that never changed them move to the current palette. */

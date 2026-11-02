@@ -99,6 +99,10 @@ export function TimeSummary() {
             <div className="stack">
               {cats.filter((c) => sum.byCat[c.id]).sort((a, b) => sum.byCat[b.id] - sum.byCat[a.id]).map((c) => {
                 const v = sum.byCat[c.id];
+                // Sub-activities split the activity's own bar; time logged without one shows as "Other".
+                const parts = (c.subs ?? []).map((s) => ({ name: s.name, v: sum.bySub[s.id] ?? 0 })).filter((p) => p.v > 0).sort((a, b) => b.v - a.v);
+                const other = v - parts.reduce((t, p) => t + p.v, 0);
+                if (parts.length && other >= 1) parts.push({ name: 'Other', v: other });
                 return (
                   <div key={c.id}>
                     <div className="row" style={{ justifyContent: 'space-between', fontSize: 14 }}>
@@ -106,6 +110,16 @@ export function TimeSummary() {
                       <span className="muted">{fmtDuration(v)} · {Math.round((v / sum.total) * 100)}%</span>
                     </div>
                     <div style={{ marginTop: 4 }}><Bar segments={[{ value: v, color: c.color }]} max={sum.total} /></div>
+                    {parts.length > 0 && (
+                      <div className="sub-stats">
+                        {parts.map((p) => (
+                          <div key={p.name} className="row small">
+                            <span className="grow">{p.name}</span>
+                            <span className="muted">{fmtDuration(p.v)} · {Math.round((p.v / v) * 100)}%</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })}

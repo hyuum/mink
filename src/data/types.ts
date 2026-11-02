@@ -8,8 +8,18 @@ export interface TimeCategory {
   id: ID;
   name: string;
   color: string;
-  /** Drawn as a thin arrow in its own lane instead of a block, like travel in a paper planner. */
-  arrow?: boolean;
+  /** How its blocks are drawn on the day; solid when unset. */
+  look?: BlockLook;
+  /** One level of finer activities, drawn in the same colour and broken out in the stats. */
+  subs?: SubActivity[];
+}
+
+/** Ways an activity's blocks can be drawn: filled, pale, outlined, striped, a side line, an arrow, or glowing. */
+export type BlockLook = 'solid' | 'soft' | 'bold' | 'hatch' | 'line' | 'arrow' | 'glow';
+
+export interface SubActivity {
+  id: ID;
+  name: string;
 }
 
 /** Every expense is either a need or a want. */
@@ -24,6 +34,8 @@ export interface TimeEntry {
   /** Optional note; painted blocks start with no label and show the activity name. */
   label: string;
   categoryId: ID;
+  /** One of the activity's sub-activities, if picked. */
+  subId?: ID;
   start: number;
   end: number | null;
   source?: EntrySource;
@@ -38,6 +50,7 @@ export interface PlannedBlock {
   id: ID;
   label: string;
   categoryId: ID;
+  subId?: ID;
   day: Day;
   /** Minutes after midnight. */
   startMin: number;
@@ -48,6 +61,7 @@ export interface PlannedBlock {
 export interface TemplateBlock {
   label: string;
   categoryId: ID;
+  subId?: ID;
   startMin: number;
   endMin: number;
 }

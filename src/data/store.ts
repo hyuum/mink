@@ -73,7 +73,13 @@ export function migrate(raw: unknown): AppData {
     const def = DEFAULT_TIME_CATEGORIES.find((x) => x.id === c.id);
     if (!def) return c;
     const recolour = Boolean(OLD_DEFAULT_COLORS[c.id]?.some((x) => x.toUpperCase() === c.color?.toUpperCase()));
-    return { ...c, color: recolour ? def.color : c.color, arrow: c.arrow ?? def.arrow };
+    return { ...c, color: recolour ? def.color : c.color };
+  }).map((c) => {
+    // The arrow switch became one of several looks; Drift keeps its side line.
+    const { arrow, ...rest } = c as TimeCategory & { arrow?: boolean };
+    const def = DEFAULT_TIME_CATEGORIES.find((x) => x.id === c.id);
+    const look = c.look ?? (arrow === true ? 'arrow' : arrow === false ? 'solid' : def?.look);
+    return { ...rest, ...(look && look !== 'solid' ? { look } : {}) };
   });
   if ((d.version ?? 1) < 2) {
     for (const c of DEFAULT_TIME_CATEGORIES) if (!timeCategories.some((x) => x.id === c.id)) timeCategories.push({ ...c });
@@ -223,12 +229,12 @@ export const actions = {
   },
 
   /* Time */
-  startTimer(label: string, categoryId: ID, now = Date.now(), planId?: ID) {
+  startTimer(label: string, categoryId: ID, now = Date.now(), planId?: ID, subId?: ID) {
     update((d) => ({
       ...d,
       entries: [
         ...d.entries.map((e) => (e.end === null ? { ...e, end: now } : e)),
-        { id: uid(), label: label.trim(), categoryId, start: now, end: null, source: 'timer', ...(planId ? { planId } : {}) },
+        { id: uid(), label: label.trim(), categoryId, ...(subId ? { subId } : {}), start: now, end: null, source: 'timer', ...(planId ? { planId } : {}) },
       ],
     }));
   },
@@ -239,9 +245,9 @@ export const actions = {
     update((d) => ({ ...d, entries: [...d.entries, { source: 'manual', ...e, id: uid() }] }));
   },
   /** Paint a range of the timeline with an activity, or erase it (null). Returns the earlier snapshot for Undo. */
-  paint(from: number, to: number, categoryId: ID | null, now = Date.now(), label = ''): AppData {
+  paint(from: number, to: number, categoryId: ID | null, now = Date.now(), label = '', subId?: ID): AppData {
     const before = state;
-    update((d) => ({ ...d, entries: paintRange(d.entries, from, to, categoryId, now, uid, label) }));
+    update((d) => ({ ...d, entries: paintRange(d.entries, from, to, categoryId, now, uid, label, subId) }));
     return before;
   },
   updateEntry(id: ID, patch: Partial<TimeEntry>) {
@@ -283,15 +289,15 @@ export const actions = {
     const p = data.planned.find((x) => x.id === real);
     if (!p) return;
     set(data);
-    actions.startTimer(p.label, p.categoryId, now, real);
+    actions.startTimer(p.label, p.categoryId, now, real, p.subId);
   },
   /** Plan [from, to) minutes of a day with an activity, or clear it (null). Returns the earlier snapshot and the new block's id. */
-  planPaint(day: string, from: number, to: number, categoryId: ID | null, label = ''): { before: AppData; id: ID | null } {
+  planPaint(day: string, from: number, to: number, categoryId: ID | null, label = '', subId?: ID): { before: AppData; id: ID | null } {
     const before = state;
     let id: ID | null = null;
     update((d) => {
       const { data } = ownPlan(d, day, uid);
-      const r = planRange(data.planned, day, from, to, categoryId, uid, label);
+      const r = planRange(data.planned, day, from, to, categoryId, uid, label, subId);
       id = r.id;
       return unlinkMissing({ ...data, planned: r.blocks });
     });
@@ -309,7 +315,7 @@ export const actions = {
       const to = msAt(p.day, p.endMin);
       entryId = uid();
       const cleared = paintRange(data.entries, from, to, null, now, uid);
-      return { ...data, entries: [...cleared, { id: entryId, label: p.label, categoryId: p.categoryId, start: from, end: to, source: 'plan', planId: id }] };
+      return { ...data, entries: [...cleared, { id: entryId, label: p.label, categoryId: p.categoryId, ...(p.subId ? { subId: p.subId } : {}), start: from, end: to, source: 'plan', planId: id }] };
     });
     return { before, entryId };
   },
@@ -413,7 +419,7 @@ export const actions = {
     update((d) => {
       const t = templateFor(d.templates, day);
       if (!t) return d;
-      const blocks = planForDay(d, day).map(({ label, categoryId, startMin, endMin }) => ({ label, categoryId, startMin, endMin }));
+      const blocks = planForDay(d, day).map(({ label, categoryId, subId, startMin, endMin }) => ({ label, categoryId, ...(subId ? { subId } : {}), startMin, endMin }));
       return { ...d, templates: replace(d.templates, t.id, { blocks }) };
     });
   },
@@ -422,7 +428,7 @@ export const actions = {
     const id = uid();
     update((d) => {
       const w = weekdayIndex(day);
-      const blocks = planForDay(d, day).map(({ label, categoryId, startMin, endMin }) => ({ label, categoryId, startMin, endMin }));
+      const blocks = planForDay(d, day).map(({ label, categoryId, subId, startMin, endMin }) => ({ label, categoryId, ...(subId ? { subId } : {}), startMin, endMin }));
       return { ...d, templates: [...d.templates.map((t) => ({ ...t, weekdays: t.weekdays.filter((x) => x !== w) })), { id, name, weekdays: [w], blocks }] };
     });
     return id;
@@ -659,12 +665,48 @@ export const actions = {
   updateTimeCategory(id: ID, patch: Partial<Omit<TimeCategory, 'id'>>) {
     update((d) => ({ ...d, timeCategories: replace<TimeCategory>(d.timeCategories, id, patch) }));
   },
+  /** Move an activity to a new place in the list; the picker and stats follow this order. */
+  moveTimeCategory(id: ID, to: number) {
+    update((d) => {
+      const from = d.timeCategories.findIndex((c) => c.id === id);
+      if (from < 0) return d;
+      const list = [...d.timeCategories];
+      const [c] = list.splice(from, 1);
+      list.splice(Math.max(0, Math.min(list.length, to)), 0, c);
+      return { ...d, timeCategories: list };
+    });
+  },
+  addSubActivity(categoryId: ID, name: string) {
+    const n = name.trim();
+    if (!n) return;
+    update((d) => ({
+      ...d,
+      timeCategories: d.timeCategories.map((c) => (c.id === categoryId && !(c.subs ?? []).some((s) => s.name.toLowerCase() === n.toLowerCase()) ? { ...c, subs: [...(c.subs ?? []), { id: uid(), name: n }] } : c)),
+    }));
+  },
+  /** Remove a sub-activity: its time stays with the activity itself. */
+  deleteSubActivity(categoryId: ID, subId: ID): AppData {
+    const before = state;
+    const drop = <T extends { categoryId: ID; subId?: ID }>(x: T): T => {
+      if (x.categoryId !== categoryId || x.subId !== subId) return x;
+      const { subId: _s, ...rest } = x;
+      return rest as T;
+    };
+    update((d) => ({
+      ...d,
+      timeCategories: d.timeCategories.map((c) => (c.id === categoryId ? { ...c, subs: (c.subs ?? []).filter((s) => s.id !== subId) } : c)),
+      entries: d.entries.map(drop),
+      planned: d.planned.map(drop),
+      templates: d.templates.map((t) => ({ ...t, blocks: t.blocks.map(drop) })),
+    }));
+    return before;
+  },
   /** Delete an activity. Its logged time, plans and template blocks move to `moveTo`, or are removed when it's null. */
   deleteTimeCategory(id: ID, moveTo: ID | null): AppData {
     const before = state;
     update((d) => {
       const move = <T extends { categoryId: ID }>(list: T[]) =>
-        moveTo ? list.map((x) => (x.categoryId === id ? { ...x, categoryId: moveTo } : x)) : list.filter((x) => x.categoryId !== id);
+        moveTo ? list.map((x) => { if (x.categoryId !== id) return x; const { subId: _s, ...rest } = x as T & { subId?: ID }; return { ...rest, categoryId: moveTo } as T; }) : list.filter((x) => x.categoryId !== id);
       return unlinkMissing({
         ...d,
         timeCategories: remove(d.timeCategories, id),

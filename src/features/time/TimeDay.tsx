@@ -3,8 +3,7 @@
 // to fill it in. "Edit plan" switches the timeline to the plan on its own, with templates.
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, useData } from '../../data/store';
-import { bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
-import { DRIFT_ID } from '../../data/seed';
+import { activityName, bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, joinsNeighbours, lookOf, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { go, showToast, timeDay, useNow } from '../../app/ui-state';
@@ -32,19 +31,20 @@ interface Block {
   startMin: number;
   endMin: number;
   categoryId: ID;
+  subId?: ID;
   label: string;
-  /** Can't be dragged: a running timer, or a block that crosses midnight. Tapping opens the editor. */
+  /** Can't be dragged: a running timer, or a block that crosses midnight. */
   fixed: boolean;
   live: boolean;
   /** A planned block shown while recording: dashed, and hold to fill it. */
   ghost: boolean;
 }
 type Gesture =
-  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; t0: number; moved: boolean }
-  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; t0: number; moved: boolean }
-  | { type: 'swipe'; x0: number; y0: number; cy: number; t0: number; moved: boolean };
+  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean }
+  | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean; held?: boolean }
+  | { type: 'swipe'; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean };
 /** `naming` adds the "What was it?" box, whose text becomes the block's name. */
-interface Pick { title: string; sub: string; clear: boolean; naming?: boolean; apply: (categoryId: ID | null, label?: string) => void }
+interface Pick { title: string; sub: string; clear: boolean; naming?: boolean; apply: (categoryId: ID | null, label?: string, subId?: ID) => void }
 interface PastName { label: string; categoryId: ID }
 
 /** A tap only counts if the finger lifts this soon, and not while the page is still gliding from a scroll. */
@@ -54,6 +54,11 @@ const GLIDE_MS = 200;
 const DOUBLE_TAP_MS = 350;
 /** A gap this short (in minutes) is filled whole by a double-tap; a longer one gets an hour. */
 const SMALL_GAP = 75;
+/**
+ * A finger has to rest this long before dragging paints time or picks up a block, so a plain swipe scrolls
+ * the day. Resting on a block selects it; only a selected block moves or resizes.
+ */
+const ARM_MS = 280;
 
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
@@ -201,7 +206,7 @@ export function TimeDay() {
   const logged: Block[] = planMode ? [] : [...entries, ...late].map((e) => {
     const end = entryEnd(e, now);
     return {
-      kind: 'entry', id: e.id, categoryId: e.categoryId, label: e.label,
+      kind: 'entry', id: e.id, categoryId: e.categoryId, subId: e.subId, label: e.label,
       startMin: Math.max(0, toMin(e.start)), endMin: Math.min(maxH * 60, Math.max(toMin(end), toMin(e.start) + 1)),
       fixed: e.end === null || e.start < dayStart || end > dayStart + maxH * 3_600_000, live: e.end === null, ghost: false,
     };
@@ -210,7 +215,7 @@ export function TimeDay() {
   // While recording, a planned block shows only from where logged time stops covering it.
   const visibleFrom = (start: number) => { let s = start; for (const b of loggedSorted) if (b.startMin <= s + 0.5 && b.endMin > s) s = b.endMin; return s; };
   const plans: Block[] = shownPlans
-    .map((p): Block => ({ kind: 'plan', id: p.id, categoryId: p.categoryId, label: p.label, startMin: planMode ? p.startMin : Math.ceil(visibleFrom(p.startMin)), endMin: p.endMin, fixed: false, live: false, ghost: !planMode }))
+    .map((p): Block => ({ kind: 'plan', id: p.id, categoryId: p.categoryId, subId: p.subId, label: p.label, startMin: planMode ? p.startMin : Math.ceil(visibleFrom(p.startMin)), endMin: p.endMin, fixed: false, live: false, ghost: !planMode }))
     .filter((b) => b.endMin - b.startMin >= 5);
   const withMove = (b: Block) => (moving && moving.id === b.id ? { ...b, startMin: moving.startMin, endMin: moving.endMin } : b);
   const loggedV = logged.map(withMove);
@@ -227,7 +232,8 @@ export function TimeDay() {
   const top = (min: number) => TOP_PAD + ((min - h0 * 60) / 60) * HOUR_PX;
   const clampTop = (min: number) => top(Math.max(h0 * 60, Math.min(h1 * 60, min)));
   const hours = Array.from({ length: h1 - h0 + 1 }, (_, i) => h0 + i);
-  const isArrow = (b: Block) => Boolean(cat(b.categoryId)?.arrow);
+  const lookOfBlock = (b: Block) => lookOf(cat(b.categoryId));
+  const isArrow = (b: Block) => lookOfBlock(b) === 'arrow';
 
   const totals = dayTotals(data.entries, day, now);
   const unlogged = unloggedMin(data.entries, day, s.dayStartHour, s.dayEndHour, day === today ? now : Infinity);
@@ -265,15 +271,15 @@ export function TimeDay() {
       sub: fmtDuration(to - from),
       clear: overlaps,
       naming: true,
-      apply: (categoryId, label = '') => {
-        const what = label || cat(categoryId ?? '')?.name;
+      apply: (categoryId, label = '', subId) => {
+        const what = label || activityName(cat(categoryId ?? ''), subId);
         if (kind === 'plan') {
-          const { before, id } = actions.planPaint(day, from, to, categoryId, label);
+          const { before, id } = actions.planPaint(day, from, to, categoryId, label, subId);
           setSel(id ? { kind: 'plan', id } : null);
           showToast(categoryId ? `Planned ${what} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)} of the plan`, before);
         } else {
           const a = msAt(day, from), b = msAt(day, to);
-          const before = actions.paint(a, b, categoryId, Date.now(), label);
+          const before = actions.paint(a, b, categoryId, Date.now(), label, subId);
           const made = categoryId ? getData().entries.find((e) => e.categoryId === categoryId && e.start <= a && e.end !== null && e.end >= b) : undefined;
           setSel(made ? { kind: 'entry', id: made.id } : null);
           showToast(categoryId ? `Logged ${what} · ${fmtDuration(to - from)}` : `Cleared ${fmtDuration(to - from)}`, before);
@@ -289,12 +295,13 @@ export function TimeDay() {
     g.cy = clientY;
     const dy = clientY - g.y0;
     if (g.type === 'swipe') { moveSwipe(clientX, clientY); return; }
-    // Decide once, after the first few pixels: sideways is a swipe between days, up or down is the timeline.
-    if (!g.moved && (g.type === 'range' || g.type === 'press')) {
+    // Before the finger has rested: sideways is a swipe between days, up or down scrolls the page.
+    if (!g.live) {
       const dx = clientX - g.x0;
       if (Math.max(Math.abs(dx), Math.abs(dy)) < 8) return;
+      disarm();
       if (Math.abs(dx) > Math.abs(dy)) {
-        gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, t0: g.t0, moved: true };
+        gesture.current = { type: 'swipe', x0: g.x0, y0: g.y0, cy: clientY, t0: g.t0, moved: true, live: true };
         beginSwipe(g.x0, g.y0, 1);
         swipe.current!.on = true;
         clearTimeout(stripTimer.current);
@@ -302,6 +309,8 @@ export function TimeDay() {
         moveSwipe(clientX, clientY);
         return;
       }
+      gesture.current = null;
+      return;
     }
     if (Math.abs(dy) > 6) g.moved = true;
     if (g.type === 'range') {
@@ -311,7 +320,7 @@ export function TimeDay() {
       return;
     }
     if (!g.moved || g.type === 'fixed') return;
-    if (g.type === 'press') { g.type = 'move'; setSel({ kind: g.block.kind, id: g.block.id }); }
+    if (g.type === 'press') g.type = 'move';
     const dm = Math.round(((dy / HOUR_PX) * 60) / SLOT) * SLOT;
     const { startMin: s0, endMin: e0 } = g.block;
     let a = s0, b = e0;
@@ -326,6 +335,7 @@ export function TimeDay() {
     const tick = () => {
       const g = gesture.current;
       if (!g || g.type === 'swipe') return;
+      if (!g.live) { requestAnimationFrame(tick); return; }
       const bottom = window.innerHeight - 150;
       const step = g.cy > bottom ? Math.min(14, (g.cy - bottom) / 4 + 3) : g.cy < 90 ? -Math.min(14, (90 - g.cy) / 4 + 3) : 0;
       if (step) { window.scrollBy(0, step); onMove(g.x0, g.cy); }
@@ -410,6 +420,31 @@ export function TimeDay() {
     return () => window.removeEventListener('scroll', onScroll);
   }, []);
 
+  // Resting a finger arms the gesture: an empty spot starts painting, a block gets selected so it can be dragged.
+  const armTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const disarm = () => clearTimeout(armTimer.current);
+  const arm = () => {
+    disarm();
+    armTimer.current = setTimeout(() => {
+      const g = gesture.current;
+      if (!g || g.live || g.type === 'swipe') return;
+      g.live = true;
+      if (g.type !== 'range') g.held = true;
+      try { navigator.vibrate?.(10); } catch { /* not supported */ }
+      if (g.type === 'range') setRange({ from: g.a, to: g.a + SLOT });
+      else setSel({ kind: g.block.kind, id: g.block.id });
+    }, ARM_MS);
+  };
+  useEffect(() => () => clearTimeout(armTimer.current), []);
+  // Once armed, the finger paints or drags instead of scrolling the page.
+  useEffect(() => {
+    const el = col.current;
+    if (!el) return;
+    const stop = (e: TouchEvent) => { const g = gesture.current; if (g?.live && g.type !== 'swipe' && e.cancelable) e.preventDefault(); };
+    el.addEventListener('touchmove', stop, { passive: false });
+    return () => el.removeEventListener('touchmove', stop);
+  }, [day]);
+
   const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.button > 0 || gesture.current || hold.current) return;
     if (performance.now() - lastScroll.current < GLIDE_MS) { e.preventDefault(); return; }
@@ -427,13 +462,18 @@ export function TimeDay() {
     if (el && block?.ghost) { startHold(e, block, el); return; }
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
+    const base = { x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false };
     if (block) {
       const handle = t.closest<HTMLElement>('[data-handle]')?.dataset.handle;
       const type = block.fixed ? 'fixed' : handle === 'top' ? 'resize-top' : handle === 'bot' ? 'resize-bot' : 'press';
-      gesture.current = { type, block, ...boundsOf(block), x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false };
+      // A selected block moves straight away; any other block has to be selected first.
+      const live = sel?.id === block.id && !block.fixed;
+      gesture.current = { type, block, ...boundsOf(block), ...base, live };
+      if (!live) arm();
     } else {
       const a = slotAt(e.clientY);
-      gesture.current = { type: 'range', a, b: a, x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false };
+      gesture.current = { type: 'range', a, b: a, ...base, live: false };
+      arm();
     }
     autoScroll();
   };
@@ -447,9 +487,11 @@ export function TimeDay() {
     if (h) { cancelHold(performance.now() - h.t0 < 250); return; }
     const g = gesture.current;
     gesture.current = null;
+    disarm();
     if (!g) return;
     if (g.type === 'swipe') { endSwipe(e.clientX); return; }
     if (g.type === 'range') {
+      if (g.live && !g.moved) { openPick(g.a, g.a + SLOT); return; }
       if (!g.moved) {
         // Double-tap an empty spot to add a block there; one tap just clears a selection.
         const t = performance.now();
@@ -471,8 +513,12 @@ export function TimeDay() {
       return;
     }
     const tap = performance.now() - g.t0 < TAP_MS;
-    if (g.type === 'fixed') { if (!g.moved && tap) setEdit({ kind: 'entry', id: g.block.id }); return; }
-    if (g.type === 'press') { if (tap) setSel(sel?.id === g.block.id ? null : { kind: g.block.kind, id: g.block.id }); return; }
+    // A tap selects a block (or lets it go again); resting on it has already selected it.
+    if (g.type === 'fixed' || (g.type === 'press' && !g.moved)) {
+      if (!g.live && tap) setSel(sel?.id === g.block.id ? null : { kind: g.block.kind, id: g.block.id });
+      else if (g.type === 'press' && g.live && !g.held && tap) setSel(null);
+      return;
+    }
     const m = moving;
     setMoving(null);
     if (!m || (m.startMin === g.block.startMin && m.endMin === g.block.endMin)) return;
@@ -486,6 +532,7 @@ export function TimeDay() {
     showToast(`${g.type === 'move' ? 'Moved' : 'Resized'} to ${fmtHM(m.startMin)} – ${fmtHM(m.endMin)}`, before);
   };
   const onPointerCancel = () => {
+    disarm();
     cancelHold(false);
     cancelSwipe();
     gesture.current = null;
@@ -528,7 +575,8 @@ export function TimeDay() {
 
   /* ---------- Rendering ---------- */
   const joins = (b: Block, list: Block[]) => {
-    const solidOf = (o: Block) => !isArrow(o) && !(o.kind === 'entry' && o.categoryId === DRIFT_ID);
+    // Planned blocks are always dashed, so only their arrows stand apart.
+    const solidOf = (o: Block) => (o.kind === 'plan' ? !isArrow(o) : joinsNeighbours(lookOfBlock(o)));
     if (!solidOf(b)) return { jt: false, jb: false };
     const solid = list.filter((o) => o.id !== b.id && solidOf(o));
     return { jt: solid.some((o) => Math.abs(o.endMin - b.startMin) < 0.5), jb: solid.some((o) => Math.abs(o.startMin - b.endMin) < 0.5) };
@@ -542,16 +590,17 @@ export function TimeDay() {
     const r = height < 24 ? 6 : 10;
     const arrow = isArrow(b);
     const selected = sel?.id === b.id;
-    const title = b.label || c?.name || 'Untitled';
+    const title = b.label || activityName(c, b.subId) || 'Untitled';
+    const look = lookOfBlock(b);
     // An arrow reaches down to the next block when it starts soon after, so it points at where you went.
     const next = arrow ? all.filter((o) => !isArrow(o) && o.startMin >= b.endMin - 0.5 && o.startMin - b.endMin <= 30).reduce((m, o) => Math.min(m, o.startMin), Infinity) : Infinity;
     const reach = Number.isFinite(next) ? Math.max(height, top(next) - y) : height;
-    const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', jt && 'jt', jb && 'jb', selected && 'sel',
-      b.live && 'live', b.categoryId === DRIFT_ID && 'drift', height < 24 && 'tiny', moving?.id === b.id && 'lifted', holding === b.id && 'holding'].filter(Boolean).join(' ');
+    const cls = ['tblock', b.kind, b.ghost && 'ghost', arrow && 'arrow', b.kind === 'entry' && !arrow && `look-${look}`, jt && 'jt', jb && 'jb', selected && 'sel',
+      b.live && 'live', height < 24 && 'tiny', moving?.id === b.id && 'lifted', holding === b.id && 'holding'].filter(Boolean).join(' ');
     return (
       <div
         key={b.id} className={cls} data-block={b.id}
-        style={{ top: y, height, ['--c' as string]: c?.color ?? '#ccc', borderRadius: arrow ? 6 : `${jt ? 0 : r}px ${jt ? 0 : r}px ${jb ? 0 : r}px ${jb ? 0 : r}px` }}
+        style={{ top: y, height, ['--c' as string]: c?.color ?? '#ccc', borderRadius: arrow ? 6 : look === 'line' && b.kind === 'entry' ? 0 : `${jt ? 0 : r}px ${jt ? 0 : r}px ${jb ? 0 : r}px ${jb ? 0 : r}px` }}
         role="button" tabIndex={0} aria-label={`${b.ghost ? 'Planned: ' : ''}${title}, ${fmtHM(b.startMin)} to ${fmtHM(b.endMin)}${b.ghost ? '. Hold to fill in.' : ''}`}
         onKeyDown={(e) => {
           if (e.key !== 'Enter' && e.key !== ' ') return;
@@ -666,7 +715,7 @@ export function TimeDay() {
 
         {!tipSeen && (
           <div className="card day-tip">
-            <p>Double-tap an empty spot to add a block, or drag down the day to pick the time exactly. Drag a block to move it, tap it to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Scroll by dragging the times on the left, and swipe the date sideways to change day.</p>
+            <p>Double-tap an empty spot to add a block, or rest your finger a moment and drag down the day to pick the time exactly. Tap or hold a block to select it, then drag it to move it or pull its ends to resize. Hold a dashed block to fill it in. Drag the <IconSun size={12} /> and <IconMoon size={12} /> tags to set when you woke up and went to bed. Swipe sideways to change day.</p>
             <button type="button" className="btn" onClick={() => { setTipSeen(true); try { localStorage.setItem(TIP_KEY, '1'); } catch { /* storage blocked */ } }}>Got it</button>
           </div>
         )}
@@ -766,14 +815,14 @@ export function TimeDay() {
         {selBlock && (
           <div className="selbar" role="toolbar" aria-label="Selected block">
             <div className="grow" style={{ minWidth: 0 }}>
-              <b>{selBlock.label || cat(selBlock.categoryId)?.name}{selBlock.kind === 'plan' ? ' · planned' : ''}</b>
+              <b>{selBlock.label || activityName(cat(selBlock.categoryId), selBlock.subId)}{selBlock.kind === 'plan' ? ' · planned' : ''}</b>
               <small>{fmtHM(selBlock.startMin)} – {fmtHM(selBlock.endMin)} · {fmtDuration(selBlock.endMin - selBlock.startMin)}</small>
             </div>
             {selBlock.kind === 'entry'
               ? <button type="button" className="btn" onClick={() => setEdit({ kind: 'entry', id: selBlock.id })}>Details</button>
               : <button type="button" className="btn" onClick={() => setPick({
                   title: 'Change activity', sub: `${fmtHM(selBlock.startMin)} – ${fmtHM(selBlock.endMin)}`, clear: false,
-                  apply: (c) => { if (!c) return; const before = getData(); const id = actions.updatePlanned(selBlock.id, { categoryId: c }); setSel({ kind: 'plan', id }); noteRecent(c); showToast('Plan updated', before); },
+                  apply: (c, _l, subId) => { if (!c) return; const before = getData(); const id = actions.updatePlanned(selBlock.id, { categoryId: c, subId }); setSel({ kind: 'plan', id }); noteRecent(c); showToast('Plan updated', before); },
                 })}>Activity</button>}
             <button type="button" className="btn danger" onClick={() => {
               const before = selBlock.kind === 'entry' ? actions.deleteEntry(selBlock.id) : actions.deletePlanned(selBlock.id);
@@ -856,8 +905,11 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
       ?? Object.keys(HINTS).find((id) => cats.some((c) => c.id === id) && HINTS[id].some((w) => q.startsWith(w) || (q.length >= 3 && w.startsWith(q))));
   // Typing a name you've used before keeps how you wrote it then.
   const typed = names.find((n) => n.label.toLowerCase() === q)?.label ?? text.trim();
-  const choose = (categoryId: ID | null, label = typed) => { pick.apply(categoryId, label); onClose(); };
-  const submit = (e: FormEvent) => { e.preventDefault(); if (guess) choose(guess); };
+  // An activity with sub-activities opens them first; picking the activity itself logs it with no sub.
+  const [parent, setParent] = useState<TimeCategory | null>(null);
+  const choose = (categoryId: ID | null, label = typed, subId?: ID) => { pick.apply(categoryId, label, subId); onClose(); };
+  const tap = (c: TimeCategory) => { if (c.subs?.length) setParent(c); else choose(c.id); };
+  const submit = (e: FormEvent) => { e.preventDefault(); const g = cats.find((c) => c.id === guess); if (g) tap(g); };
   return (
     <div className="stack" style={{ gap: 14 }}>
       <div>
@@ -870,14 +922,28 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
             value={text} onChange={(e) => setText(e.target.value)} />
         </form>
       )}
-      <div className="act-grid">
-        {ordered.map((c) => (
-          <button key={c.id} type="button" className={`act-chip ${recent.includes(c.id) ? 'recent' : ''} ${guess === c.id ? 'hit' : guess ? 'dim' : ''}`} onClick={() => choose(c.id)}>
-            <span className="swatch" style={{ background: c.color }} />{c.name}
-          </button>
-        ))}
-        {pick.clear && <button type="button" className="act-chip clear" onClick={() => choose(null, '')}>Clear this time</button>}
-      </div>
+      {parent ? (
+        <div className="stack" style={{ gap: 8 }}>
+          <button type="button" className="card-link" style={{ alignSelf: 'flex-start', justifySelf: 'start' }} onClick={() => setParent(null)}>‹ All activities</button>
+          <div className="act-grid">
+            <button type="button" className="act-chip" onClick={() => choose(parent.id)}><span className="swatch" style={{ background: parent.color }} />Just {parent.name}</button>
+            {parent.subs!.map((s) => (
+              <button key={s.id} type="button" className="act-chip" onClick={() => choose(parent.id, typed, s.id)}>
+                <span className="swatch" style={{ background: parent.color }} />{s.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="act-grid">
+          {ordered.map((c) => (
+            <button key={c.id} type="button" className={`act-chip ${recent.includes(c.id) ? 'recent' : ''} ${guess === c.id ? 'hit' : guess ? 'dim' : ''}`} onClick={() => tap(c)} aria-haspopup={c.subs?.length ? 'true' : undefined}>
+              <span className="swatch" style={{ background: c.color }} />{c.name}{c.subs?.length ? <span className="muted" aria-hidden="true"> ›</span> : null}
+            </button>
+          ))}
+          {pick.clear && <button type="button" className="act-chip clear" onClick={() => choose(null, '')}>Clear this time</button>}
+        </div>
+      )}
       <button type="button" className="btn ghost block" onClick={onClose}>Cancel</button>
     </div>
   );

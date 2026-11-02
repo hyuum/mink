@@ -2,7 +2,6 @@
 // An extra way to look at the day; tucked behind a small toggle on the Day screen.
 import type { Milestone, TimeCategory, TimeEntry } from '../../data/types';
 import { entryEnd } from '../../data/logic';
-import { DRIFT_ID } from '../../data/seed';
 import { dayStartMs, fmtDuration } from '../../lib/dates';
 import { MilestoneIcon } from './Milestones';
 
@@ -29,7 +28,9 @@ export function Dial({ day, entries, cats, milestones, now, total, isToday }: {
     <svg viewBox="0 0 300 300" width="100%" style={{ maxWidth: 320, display: 'block', margin: '0 auto' }} role="img" aria-label={`The day as a 24-hour ring, ${fmtDuration(total)} logged`}>
       <defs>
         <pattern id="dial-sleep" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="var(--track)" /><rect width="3" height="6" fill="var(--sleep)" /></pattern>
-        <pattern id="dial-drift" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill="#B7A3C2" /><rect width="2.5" height="6" fill="#DDD2E3" /></pattern>
+        {cats.filter((c) => c.look === 'hatch').map((c) => (
+          <pattern key={c.id} id={`dial-h-${c.id}`} width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="6" height="6" fill={c.color} fillOpacity={0.3} /><rect width="3" height="6" fill={c.color} /></pattern>
+        ))}
       </defs>
       <circle cx={C} cy={C} r={(RO + RI) / 2} fill="none" stroke="var(--track)" strokeWidth={RO - RI} />
       {wake && wake.min > 0 && <path d={sector(0, Math.min(wake.min, 1439))} fill="url(#dial-sleep)" />}
@@ -38,7 +39,10 @@ export function Dial({ day, entries, cats, milestones, now, total, isToday }: {
         const a = toMin(e.start), b = toMin(entryEnd(e, now));
         if (b - a < 2) return null;
         const c = cats.find((x) => x.id === e.categoryId);
-        return <path key={e.id} d={sector(a + 0.6, b - 0.6)} fill={e.categoryId === DRIFT_ID ? 'url(#dial-drift)' : c?.color ?? '#ccc'} />;
+        // The ring follows each activity's look: hatched stays striped, and the light looks are drawn pale.
+        const look = c?.look ?? 'solid';
+        const pale = look === 'soft' || look === 'line' || look === 'arrow';
+        return <path key={e.id} d={sector(a + 0.6, b - 0.6)} fill={look === 'hatch' ? `url(#dial-h-${c!.id})` : c?.color ?? '#ccc'} fillOpacity={pale ? 0.45 : 1} />;
       })}
       {Array.from({ length: 24 }, (_, h) => {
         const [x1, y1] = pol(h * 60, RI - 4), [x2, y2] = pol(h * 60, RI - (h % 6 === 0 ? 10 : 6));

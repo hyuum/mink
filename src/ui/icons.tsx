@@ -37,7 +37,7 @@ export const IconLeave = (p: P) => <S {...p}><path d="M14 4h5v16h-5M10 8l-4 4 4 
 export const IconPin = (p: P) => <S {...p}><path d="M12 21s-6.5-5.6-6.5-11a6.5 6.5 0 0 1 13 0c0 5.4-6.5 11-6.5 11z" /><circle cx="12" cy="10" r="2.2" /></S>;
 export const IconLunch = (p: P) => <S {...p}><path d="M7 3v8M5 3v5a2 2 0 0 0 4 0V3M7 11v10M16 21V3c-2.2 1.2-3 3.8-3 7h3" /></S>;
 export const IconTrash = (p: P) => <S {...p}><path d="M4 7h16M9 7V4.5h6V7M6.5 7l1 13h9l1-13M10 11v5M14 11v5" /></S>;
-export const IconArrowDown = (p: P) => <S {...p}><path d="M12 4v15M6 13l6 6 6-6" /></S>;
+export const IconGrip = (p: P) => <S {...p}><g fill="currentColor" stroke="none"><circle cx="9" cy="6" r="1.6" /><circle cx="15" cy="6" r="1.6" /><circle cx="9" cy="12" r="1.6" /><circle cx="15" cy="12" r="1.6" /><circle cx="9" cy="18" r="1.6" /><circle cx="15" cy="18" r="1.6" /></g></S>;
 export const IconEye = (p: P) => <S {...p}><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z" /><circle cx="12" cy="12" r="3" /></S>;
 export const IconPencil = (p: P) => <S {...p}><path d="M4 20l1-4.5L15.5 5a2.1 2.1 0 0 1 3 3L8 18.5z" /><path d="M13.5 7l3 3" /></S>;
 export const IconPhone = (p: P) => <S {...p}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></S>;

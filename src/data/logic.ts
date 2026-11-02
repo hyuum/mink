@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, Rewards, SpendKind, Task, TextLine, TimeEntry, TrackerItem } from './types';
+import type { AppData, Bill, BlockLook, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, Rewards, SpendKind, Task, TextLine, TimeCategory, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 
 /* ---------- Time ---------- */
@@ -7,6 +7,8 @@ import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, week
 export interface Totals {
   total: number;
   byCat: Record<ID, number>;
+  /** Minutes per sub-activity id; the rest of an activity's time had no sub picked. */
+  bySub: Record<ID, number>;
 }
 
 export interface DaySummary extends Totals {
@@ -28,25 +30,29 @@ export function dayTotals(entries: TimeEntry[], day: Day, now: number): Totals {
   const from = dayStartMs(day);
   const to = dayStartMs(addDays(day, 1));
   const byCat: Record<ID, number> = {};
+  const bySub: Record<ID, number> = {};
   let total = 0;
   for (const e of entries) {
     const m = overlapMin(e, from, to, now);
     if (m <= 0) continue;
     byCat[e.categoryId] = (byCat[e.categoryId] ?? 0) + m;
+    if (e.subId) bySub[e.subId] = (bySub[e.subId] ?? 0) + m;
     total += m;
   }
-  return { total, byCat };
+  return { total, byCat, bySub };
 }
 
 export function rangeSummary(entries: TimeEntry[], days: Day[], now: number): Totals & { days: DaySummary[] } {
   const out: DaySummary[] = days.map((day) => ({ day, ...dayTotals(entries, day, now) }));
   const byCat: Record<ID, number> = {};
+  const bySub: Record<ID, number> = {};
   let total = 0;
   for (const d of out) {
     total += d.total;
     for (const [k, v] of Object.entries(d.byCat)) byCat[k] = (byCat[k] ?? 0) + v;
+    for (const [k, v] of Object.entries(d.bySub)) bySub[k] = (bySub[k] ?? 0) + v;
   }
-  return { days: out, total, byCat };
+  return { days: out, total, byCat, bySub };
 }
 
 export function weekDays(anyDay: Day): Day[] {
@@ -71,7 +77,26 @@ export function entriesForDay(entries: TimeEntry[], day: Day, now: number): Time
  * A running timer that overlaps keeps running after the painted range.
  * Neighbouring painted blocks of the same activity (and no label) are merged into one.
  */
-export function paintRange(entries: TimeEntry[], from: number, to: number, categoryId: ID | null, now: number, makeId: () => ID, label = ''): TimeEntry[] {
+/** The looks an activity's blocks can take, in the order the picker shows them. */
+export const LOOKS: { id: BlockLook; name: string; hint: string }[] = [
+  { id: 'solid', name: 'Solid', hint: 'Normal blocks' },
+  { id: 'soft', name: 'Soft', hint: 'Pale, low-key' },
+  { id: 'bold', name: 'Bold', hint: 'Outlined, stands out' },
+  { id: 'hatch', name: 'Hatched', hint: 'Striped, like sleep' },
+  { id: 'line', name: 'Line', hint: 'Just a thin line' },
+  { id: 'arrow', name: 'Arrow', hint: 'An arrow, like travel' },
+  { id: 'glow', name: 'Glow', hint: 'Soft halo' },
+];
+export const lookOf = (c: TimeCategory | undefined): BlockLook => c?.look ?? 'solid';
+/** Filled looks merge with the block above or below; lines, arrows and glows stay apart. */
+export const joinsNeighbours = (look: BlockLook) => look !== 'line' && look !== 'arrow' && look !== 'glow';
+/** "Uni · Lecture" for a sub-activity, otherwise just the activity. */
+export const activityName = (c: TimeCategory | undefined, subId?: string): string => {
+  const sub = subId ? c?.subs?.find((s) => s.id === subId) : undefined;
+  return sub ? `${c?.name} · ${sub.name}` : c?.name ?? '';
+};
+
+export function paintRange(entries: TimeEntry[], from: number, to: number, categoryId: ID | null, now: number, makeId: () => ID, label = '', subId?: ID): TimeEntry[] {
   if (to <= from) return entries;
   const out: TimeEntry[] = [];
   for (const e of entries) {
@@ -80,7 +105,7 @@ export function paintRange(entries: TimeEntry[], from: number, to: number, categ
     if (e.start < from) out.push({ ...e, end: from });
     if (end > to) out.push({ ...e, id: e.start < from ? makeId() : e.id, start: to, end: e.end });
   }
-  if (categoryId) out.push({ id: makeId(), label, categoryId, start: from, end: to, source: 'paint' });
+  if (categoryId) out.push({ id: makeId(), label, categoryId, ...(subId ? { subId } : {}), start: from, end: to, source: 'paint' });
   return mergeNeighbours(out.filter((e) => e.end === null || e.end - e.start >= MIN_MS));
 }
 
@@ -89,7 +114,7 @@ function mergeNeighbours(entries: TimeEntry[]): TimeEntry[] {
   const out: TimeEntry[] = [];
   for (const e of sorted) {
     const prev = out[out.length - 1];
-    if (prev && prev.end !== null && e.end !== null && prev.end === e.start && prev.categoryId === e.categoryId && !prev.label && !e.label) {
+    if (prev && prev.end !== null && e.end !== null && prev.end === e.start && prev.categoryId === e.categoryId && prev.subId === e.subId && !prev.label && !e.label) {
       out[out.length - 1] = { ...prev, end: e.end };
     } else out.push(e);
   }
@@ -144,7 +169,7 @@ export function ownPlan(d: AppData, day: Day, makeId: () => ID): { data: AppData
 }
 
 /** Clears [from, to) minutes in one day's plan, trimming or splitting blocks, then adds a block if given an activity. */
-export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: number, categoryId: ID | null, makeId: () => ID, label = ''): { blocks: PlannedBlock[]; id: ID | null } {
+export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: number, categoryId: ID | null, makeId: () => ID, label = '', subId?: ID): { blocks: PlannedBlock[]; id: ID | null } {
   if (to <= from) return { blocks, id: null };
   const out: PlannedBlock[] = [];
   for (const p of blocks) {
@@ -153,7 +178,7 @@ export function planRange(blocks: PlannedBlock[], day: Day, from: number, to: nu
     if (p.endMin > to) out.push({ ...p, id: p.startMin < from ? makeId() : p.id, startMin: to });
   }
   const id = categoryId ? makeId() : null;
-  if (categoryId && id) out.push({ id, label, categoryId, day, startMin: from, endMin: to });
+  if (categoryId && id) out.push({ id, label, categoryId, ...(subId ? { subId } : {}), day, startMin: from, endMin: to });
   return { blocks: out, id };
 }
 

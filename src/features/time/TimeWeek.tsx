@@ -3,7 +3,6 @@
 import { useRef } from 'react';
 import { useData } from '../../data/store';
 import { avgMin, bedOf, donePlanIds, entriesForDay, entryEnd, planForDay, rangeSummary, wakeOf, weekDays } from '../../data/logic';
-import { DRIFT_ID } from '../../data/seed';
 import { addDays, dayNum, dayStartMs, fmtDuration, fmtHM, minutesOfDay, monthOf, monthShort, todayISO, weekStart, weekdayLong, weekdayShort } from '../../lib/dates';
 import { ERASE, go, timeDay, useNow } from '../../app/ui-state';
 import { Band, Card } from '../../ui/kit';
@@ -109,7 +108,7 @@ export function TimeWeek() {
                     const a = Math.max(H0 * 60, toMin(e.start));
                     const b = Math.min(24 * 60, toMin(entryEnd(e, now)));
                     if (b <= a) return null;
-                    return <span key={e.id} className={`spread-blk ${e.categoryId === DRIFT_ID ? 'drift' : ''}`} title={`${e.label || cat(e.categoryId)?.name} · ${fmtHM(a)}–${fmtHM(b)}`} style={{ top: y(a) + 0.5, height: Math.max(1.5, y(b) - y(a) - 1), background: cat(e.categoryId)?.color }} />;
+                    return <span key={e.id} className={`spread-blk look-${cat(e.categoryId)?.look ?? 'solid'}`} title={`${e.label || cat(e.categoryId)?.name} · ${fmtHM(a)}–${fmtHM(b)}`} style={{ top: y(a) + 0.5, height: Math.max(1.5, y(b) - y(a) - 1), ['--c' as string]: cat(e.categoryId)?.color }} />;
                   })}
                   {planForDay(data, d).filter((p) => !done.has(p.id) && (d > today || (d === today && p.endMin > minutesOfDay(now)))).map((p) => (
                     <span key={p.id} className="spread-blk planned" style={{ top: y(p.startMin) + 0.5, height: y(p.endMin) - y(p.startMin) - 1, borderColor: cat(p.categoryId)?.color }} />
@@ -138,7 +137,7 @@ export function TimeWeek() {
         <Card title={isCurrent ? 'This week so far' : 'That week'} action={<button className="card-link" onClick={() => go('stats')}>More stats</button>}>
           <p className="num mid">{fmtDuration(sum.total)}</p>
           <div className="legend" style={{ marginTop: 10 }}>
-            {weekCats.map((c) => <span key={c.id}><span className={`dot ${c.id === DRIFT_ID ? 'drift' : ''}`} style={{ background: c.color }} />{c.name} {fmtDuration(sum.byCat[c.id])}</span>)}
+            {weekCats.map((c) => <span key={c.id}><span className="dot" style={{ background: c.color }} />{c.name} {fmtDuration(sum.byCat[c.id])}</span>)}
           </div>
           <div className="legend" style={{ marginTop: 10 }}>
             <span><span className="sleep-dot wake inline" />Wake up</span>
