@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankSuggestions, bedMinFromClock, bonusFor, dailies, dayCoverage, streakBefore, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankPattern, bankSuggestions, bedMinFromClock, bonusFor, dailies, dayCoverage, streakBefore, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry, TrackerItem } from '../src/data/types.ts';
@@ -348,7 +348,7 @@ test('bank suggestions skip logged and dismissed ones, flag likely duplicates, a
     { id: 'e2', amount: 900, kind: 'want' as const, tags: [], note: 'kiosk', day: '2026-10-20', bankKey: 'c', createdAt: 0 },
   ];
   const s = bankSuggestions(notes, expenses, { mugi: { kind: 'want', tags: ['coffee'], note: 'matcha latte' } }, ['d'], day);
-  assert.deepEqual(s.map((x) => [x.key, x.merchant, x.note, x.logged]), [['a2', 'freshway', 'freshway', true], ['b', 'mugi', 'matcha latte', false]]);
+  assert.deepEqual(s.map((x) => [x.key, x.merchant, x.note, x.logged]), [['a', 'freshway', 'freshway', true], ['b', 'mugi', 'matcha latte', false]]);
   assert.deepEqual(s[1].tags, ['coffee']);
 });
 
@@ -435,4 +435,25 @@ test('streaks are strict: a missed day starts again, and the bonus grows to +10'
   assert.equal(streakBefore(r, '2026-10-23'), 0);
   assert.equal(bonusFor(3), 26);
   assert.equal(bonusFor(9), 30);
+});
+
+test('bank notifications: ads, offers and repeats are not spends; "never show ones like this" sticks', () => {
+  assert.equal(parseBankNote('Big Store', 'Laptops on sale now from $999'), null);
+  assert.equal(parseBankNote('Airline', 'Flights to Bali $299. Book now!'), null);
+  assert.equal(parseBankNote('Bank', '20% off at Mugi Cafe with your card'), null);
+  assert.equal(parseBankNote('Bank', 'Your account has a $40.00 pending authorisation'), null);
+  assert.equal(parseBankNote('Bank', 'Weekly summary: $312.40'), null);
+  assert.deepEqual(parseBankNote('Bank', 'You paid $8.00 to Opal'), { amount: 800, merchant: 'opal' });
+  const day = () => '2026-10-22';
+  const note = (key: string, text: string, postedAt: number) => ({ key, pkg: 'bank', label: 'Bank', title: 'Purchase', text, postedAt });
+  const hour = 3_600_000;
+  // The same notification posted again two hours later, after the first was approved, doesn't come back.
+  const notes = [note('a', 'Purchase of $6.50 at Mugi Cafe', 0), note('b', 'Purchase of $6.50 at Mugi Cafe', 2 * hour), note('c', 'Purchase of $12.00 at Kiosk', 3 * hour)];
+  const approved = [{ id: 'e', amount: 650, kind: 'want' as const, tags: [], note: 'mugi cafe', day: '2026-10-22', bankKey: 'a', createdAt: 0 }];
+  assert.deepEqual(bankSuggestions(notes, approved, {}, [], day).map((s) => s.key), ['c']);
+  assert.deepEqual(bankSuggestions(notes, [], {}, [], day).map((s) => s.key), ['c', 'a']);
+  assert.equal(bankSuggestions(notes, [], {}, [], day)[0].source.text, 'Purchase of $12.00 at Kiosk');
+  // Ignoring one wording hides it whatever the amount.
+  const pattern = bankPattern('Purchase', 'Purchase of $99.99 at Kiosk');
+  assert.deepEqual(bankSuggestions(notes, [], {}, [], day, [pattern]).map((s) => s.key), ['a']);
 });

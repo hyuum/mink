@@ -752,10 +752,16 @@ export interface BankSuggestion {
   note: string;
   /** A spend of the same amount is already logged that day, so this is probably a duplicate. */
   logged: boolean;
+  /** The notification it was read from, as it appeared. */
+  source: { title: string; text: string };
 }
 
 /** Money coming in, or not a purchase at all. */
-const NOT_SPENDING = /\b(received|receive|deposit(ed)?|refund(ed)?|credited|paid you|sent you|incoming|salary|pay ?day|transfer(red)? from|cashback|reversal|reversed|declined|balance|available|limit|reminder|due on|statement)\b/i;
+const NOT_SPENDING = /\b(received|receive|deposit(ed)?|refund(ed)?|credited|paid you|sent you|incoming|salary|pay ?day|transfer(red)? from|cashback|reversal|reversed|declined|balance|available|limit|reminder|due on|statement|pending|authori[sz]ation hold)\b/i;
+/** Ads and offers that quote a price ("on sale for $49", "flights from $99"). */
+const PROMO = /\b(sale|on sale|off|offer|offers|deal|deals|discount|save|saving|savings|promo|promotion|coupon|voucher|code|win|reward|rewards|points|bonus|free|limited|ends|ending soon|shop now|buy now|book now|order now|new arrivals|price drop|starting at|from only|only|was|subscribe|upgrade|trial|earn|exclusive|hurry|last chance|don'?t miss|up to)\b|\d+\s?%/i;
+/** Words that say money actually left your account. */
+const PURCHASE = /\b(purchase|purchased|spent|spend|paid|payment|charged|charge|debited|debit|transaction|tap(ped)?|contactless|approved|card ending|withdrawal|withdrew|bought)\b/i;
 /** Titles that name the kind of alert rather than the shop. */
 const GENERIC_TITLE = /\b(purchase|payment|paid|transaction|spent|spend|card|alert|bank|debit|credit|account|notification|approved|you)\b/i;
 const AMOUNT_RE = /(?:A?\$|AUD\s?)\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/;
@@ -771,7 +777,7 @@ export const spendName = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCas
  */
 export function parseBankNote(title: string, text: string): { amount: number; merchant: string } | null {
   const all = `${title}\n${text}`;
-  if (NOT_SPENDING.test(all)) return null;
+  if (NOT_SPENDING.test(all) || PROMO.test(all)) return null;
   const a = AMOUNT_RE.exec(all);
   if (!a) return null;
   const amount = Number(a[1].replace(/,/g, '')) * 100 + Number((a[2] ?? '0').padEnd(2, '0'));
@@ -780,34 +786,54 @@ export function parseBankNote(title: string, text: string): { amount: number; me
   const m = MERCHANT_RE.exec(text) ?? MERCHANT_RE.exec(title);
   let merchant = m ? m[1] : '';
   // "… with Visa ••12" names the card, not the shop.
-  if (merchant && (AMOUNT_RE.test(merchant) || CARD_RE.test(merchant))) merchant = '';
+  const paidWithCard = Boolean(merchant && CARD_RE.test(merchant));
+  if (merchant && (AMOUNT_RE.test(merchant) || paidWithCard)) merchant = '';
+  // It has to read like a purchase: a word like "purchase" or "paid", a card, or "at" a shop.
+  if (!PURCHASE.test(all) && !paidWithCard && !/\bat\s/i.test(all)) return null;
   if (!merchant && title && !GENERIC_TITLE.test(title) && !AMOUNT_RE.test(title)) merchant = title;
   return { amount, merchant: spendName(merchant).slice(0, 40) };
 }
 
 /**
+ * The shape of a notification with its numbers taken out, so "Never show ones like this" can match the
+ * next one that only differs by amount or date.
+ */
+export const bankPattern = (title: string, text: string) => spendName(`${title} ${text}`).replace(/[\d.,$]+/g, '#').slice(0, 120);
+
+/**
  * Spends to review from kept bank notifications: newest first, leaving out ones already logged from a
  * notification or dismissed. Each starts with what you chose for that shop last time.
  */
-export function bankSuggestions(notes: BankNote[], expenses: Expense[], merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>, dismissed: string[], toDay: (ms: number) => Day): BankSuggestion[] {
+export function bankSuggestions(
+  notes: BankNote[], expenses: Expense[], merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>, dismissed: string[],
+  toDay: (ms: number) => Day, ignore: string[] = [],
+): BankSuggestion[] {
   const used = new Set([...dismissed, ...expenses.map((e) => e.bankKey).filter((k): k is string => Boolean(k))]);
+  const ignored = new Set(ignore);
   const out: BankSuggestion[] = [];
-  const seen = new Set<string>();
-  for (const n of [...notes].sort((a, b) => b.postedAt - a.postedAt)) {
-    if (used.has(n.key)) continue;
+  // Repeats are matched against every earlier notification, including ones already approved or dismissed,
+  // so a notification posted again later doesn't come back for review.
+  const lastText = new Map<string, number>();
+  const lastSpend = new Map<string, number>();
+  for (const n of [...notes].sort((a, b) => a.postedAt - b.postedAt)) {
     const p = parseBankNote(n.title, n.text);
-    if (!p) continue;
-    // Some banks post the same purchase twice within a minute or two.
-    const dup = `${p.amount}|${p.merchant}|${Math.round(n.postedAt / 180_000)}`;
-    if (seen.has(dup)) continue;
-    seen.add(dup);
+    if (!p || ignored.has(bankPattern(n.title, n.text))) continue;
+    const textKey = `${n.pkg}|${n.title}|${n.text}`;
+    const spendKey = `${p.amount}|${p.merchant}`;
+    // The very same words within a day, or the same amount at the same shop within 10 minutes.
+    const repeat = (lastText.has(textKey) && n.postedAt - lastText.get(textKey)! < 86_400_000)
+      || (lastSpend.has(spendKey) && n.postedAt - lastSpend.get(spendKey)! < 10 * 60_000);
+    lastText.set(textKey, n.postedAt);
+    lastSpend.set(spendKey, n.postedAt);
+    if (repeat || used.has(n.key)) continue;
     const day = toDay(n.postedAt);
     const memory = merchants[p.merchant];
     out.push({
       key: n.key, day, at: n.postedAt, amount: p.amount, merchant: p.merchant, app: n.label,
       kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? p.merchant,
       logged: expenses.some((e) => e.day === day && e.amount === p.amount && !e.bankKey),
+      source: { title: n.title, text: n.text },
     });
   }
-  return out;
+  return out.reverse();
 }

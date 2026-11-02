@@ -192,6 +192,8 @@ export interface BankSettings {
   apps: string[];
   /** What you chose last time for a merchant (lower case), so the next spend there starts the same. */
   merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>;
+  /** Notifications to never suggest again, by their wording with the numbers taken out (see bankPattern). */
+  ignore?: string[];
 }
 
 export interface Settings {

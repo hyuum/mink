@@ -347,6 +347,12 @@ export const actions = {
     update((d) => ({ ...d, bankDismissed: [...d.bankDismissed.filter((k) => !keys.includes(k)), ...keys].slice(-1000) }));
     return before;
   },
+  /** Never suggest notifications worded like this one again (whatever the amount or date). */
+  ignoreBankPattern(pattern: string): AppData {
+    const before = state;
+    update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ignore: [...(d.settings.bank.ignore ?? []).filter((p) => p !== pattern), pattern].slice(-200) } } }));
+    return before;
+  },
   updateBankSettings(patch: Partial<AppData['settings']['bank']>) {
     update((d) => ({ ...d, settings: { ...d.settings, bank: { ...d.settings.bank, ...patch } } }));
   },

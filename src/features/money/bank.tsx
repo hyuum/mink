@@ -2,7 +2,7 @@
 // spends to review, once a day, from a card on Home and Money. Settings live in More › Settings.
 import { useEffect, useMemo, useState } from 'react';
 import { actions, useData } from '../../data/store';
-import { bankSuggestions, spendName, type BankNote, type BankSuggestion } from '../../data/logic';
+import { bankPattern, bankSuggestions, spendName, type BankNote, type BankSuggestion } from '../../data/logic';
 import type { SpendKind } from '../../data/types';
 import { relativeDay, todayISO } from '../../lib/dates';
 import { fmtMoney } from '../../lib/money';
@@ -37,7 +37,7 @@ export function useBankSuggestions(): BankSuggestion[] {
   const on = phoneAvailable() && b.enabled && b.apps.length > 0;
   const notes = useBankNotes(on);
   return useMemo(
-    () => (on ? bankSuggestions(notes, data.expenses, b.merchants, data.bankDismissed, (ms) => todayISO(ms)) : []),
+    () => (on ? bankSuggestions(notes, data.expenses, b.merchants, data.bankDismissed, (ms) => todayISO(ms), b.ignore) : []),
     [on, notes, data.expenses, b.merchants, data.bankDismissed],
   );
 }
@@ -71,6 +71,8 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
   // Anything that looks already logged by hand starts unticked.
   const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(suggestions.map((s) => [s.key, { on: !s.logged, note: s.note, kind: s.kind }])));
   const set = (key: string, patch: Partial<Row>) => setRows((r) => ({ ...r, [key]: { ...r[key], ...patch } }));
+  // Which spend's original notification is showing.
+  const [shown, setShown] = useState<string | null>(null);
   const chosen = suggestions.filter((s) => rows[s.key]?.on);
   const sum = chosen.reduce((t, s) => t + s.amount, 0);
   const approve = () => {
@@ -111,7 +113,23 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
                   </span>
                   {s.tags.map((t) => <span key={t} className="chip-mini">#{t}</span>)}
                   {s.logged && <span className="warn-mini">Already logged?</span>}
+                  <button type="button" className="bank-src-btn" aria-expanded={shown === s.key} onClick={() => setShown(shown === s.key ? null : s.key)}>{shown === s.key ? 'Hide notification' : 'Notification'}</button>
                 </div>
+                {shown === s.key && (
+                  <div className="bank-src">
+                    <blockquote>
+                      <small>{s.app}</small>
+                      {s.source.title && <b>{s.source.title}</b>}
+                      <span>{s.source.text}</span>
+                    </blockquote>
+                    <button type="button" className="card-link" onClick={() => {
+                      const before = actions.ignoreBankPattern(bankPattern(s.source.title, s.source.text));
+                      actions.dismissBank([s.key]);
+                      setShown(null);
+                      showToast('Notifications like this won’t be suggested again', before);
+                    }}>Not a spend: never show ones like this</button>
+                  </div>
+                )}
               </div>
             </div>
           );
