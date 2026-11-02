@@ -412,9 +412,6 @@ a.btn { text-decoration: none; }
 .pc-row button.dash { border-style: dashed; }
 .pc-name { min-height: 36px; flex: 1; min-width: 0; border-radius: 10px; border: 1.5px solid var(--line); background: var(--card); color: var(--band-ink); padding: 0 10px; font-size: 15px; }
 @media (prefers-reduced-motion: reduce) { .tblock .wave { animation: none; } .tl-col .tblock { transition: none; } }
-.update-bar { position: fixed; left: 50%; top: calc(10px + env(safe-area-inset-top, 0px)); transform: translateX(-50%); z-index: 70; display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 16px; border-radius: 20px; background: var(--ink); color: var(--paper); font-size: 14px; box-shadow: var(--shadow); white-space: nowrap; max-width: calc(100% - 24px); }
-.update-bar button { border: none; background: var(--paper); color: var(--ink); font-weight: 700; border-radius: 14px; padding: 6px 12px; }
-.update-bar button.later { background: none; color: var(--paper); font-weight: 400; text-decoration: underline; text-underline-offset: 3px; padding: 6px 4px; }
 
 /* Wake-up and bedtime: a dashed line with a tag in the hour column you drag up or down. */
 .sleep-marker { position: absolute; left: 0; right: 10px; height: 0; z-index: 4; pointer-events: none; }

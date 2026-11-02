@@ -8,6 +8,7 @@ import { fmtMoney, parseAmount, pressKey } from '../../lib/money';
 import { closeQuickAdd, quickAdd, showToast, type AddTab } from '../../app/ui-state';
 import { ChipGroup, KindToggle, Sheet, TagPicker } from '../../ui/kit';
 import { IconClose, IconPlay } from '../../ui/icons';
+import { PAGES } from '../../app/features';
 
 export function QuickAdd() {
   const tab = quickAdd.use();
@@ -20,7 +21,7 @@ export function QuickAdd() {
 
 function Body({ initial }: { initial: AddTab }) {
   const [tab, setTab] = useState<AddTab>(initial);
-  const tabs: { id: AddTab; label: string }[] = [{ id: 'spend', label: 'Spend' }, { id: 'time', label: 'Time' }, { id: 'task', label: 'Task' }];
+  const tabs: { id: AddTab; label: string }[] = [{ id: 'spend', label: 'Spend' }, { id: 'time', label: 'Time' }, ...(PAGES ? [{ id: 'task' as const, label: 'Task' }] : [])];
   return (
     <>
       <div className="row" style={{ gap: 8 }}>
@@ -33,7 +34,7 @@ function Body({ initial }: { initial: AddTab }) {
       </div>
       {tab === 'spend' && <SpendForm />}
       {tab === 'time' && <TimeForm />}
-      {tab === 'task' && <TaskForm />}
+      {PAGES && tab === 'task' && <TaskForm />}
     </>
   );
 }

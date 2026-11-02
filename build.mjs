@@ -1,7 +1,7 @@
 // Build script. Produces two outputs:
-//   dist/      the installable web app (PWA): React bundled in, works offline.
+//   dist/      the app's files, which the Android app ships inside it (npx cap sync android).
 //   preview/   a single-file preview for hosted sandboxes that only allow
-//              React from a CDN; React is read from window.React instead.
+//              React from a CDN; React is read from window.React instead. Only for trying things out.
 // Usage: node build.mjs            build both
 //        node build.mjs --serve    build dist/ and serve it on http://localhost:5173
 import * as esbuild from 'esbuild';
@@ -14,10 +14,8 @@ const FONT_LINK =
   '<link rel="preconnect" href="https://fonts.googleapis.com">' +
   '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Young+Serif&display=swap">';
 
-// Each build stamps the service worker's cache name, so installed apps notice every release
-// and show the "new version" bar, even when sw.js itself didn't change. Settings shows the time too.
+// When this build was made: Settings shows it, and the Android app compares it with the newest download.
 const BUILT_AT = Date.now();
-const BUILD = BUILT_AT.toString(36);
 
 const common = {
   entryPoints: ['src/main.tsx'],
@@ -46,12 +44,7 @@ const reactGlobals = {
 };
 
 async function copyPublic(out) {
-  for (const f of await readdir('public')) {
-    if (f === 'sw.js') {
-      const sw = await readFile(join('public', f), 'utf8');
-      await writeFile(join(out, f), sw.replace(/const CACHE = '([^']+)';/, `const CACHE = '$1-${BUILD}';`));
-    } else await copyFile(join('public', f), join(out, f));
-  }
+  for (const f of await readdir('public')) await copyFile(join('public', f), join(out, f));
 }
 
 function appHtml() {
@@ -62,9 +55,7 @@ function appHtml() {
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#4B6545">
 <title>Matcha Planner</title>
-<link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
-<link rel="apple-touch-icon" href="icon.svg">
 ${FONT_LINK}
 <link rel="stylesheet" href="app.css">
 </head>

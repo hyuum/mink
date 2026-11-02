@@ -9,12 +9,13 @@ import { FOLDER_ICONS } from '../../data/icons';
 import { IconChoice, ThingIcon } from '../../ui/things';
 import { SETTINGS_PAGES, Settings } from './More';
 import { Lines, PageView } from './Page';
+import { PAGES } from '../../app/features';
 
 export function More() {
   const view = moreView.use();
   useEffect(() => { window.scrollTo({ top: 0 }); }, [view]);
   if (view.kind === 'settings') return <Settings page={view.page} />;
-  if (view.kind === 'folder') return <PageView id={view.id} />;
+  if (view.kind === 'folder' && PAGES) return <PageView id={view.id} />;
   return <Hub />;
 }
 
@@ -31,18 +32,18 @@ function Hub() {
       <Band>
         <div className="band-row">
           <h1>More</h1>
-          <button type="button" className="round-btn" aria-label="New page" onClick={() => setMaking(true)}>+</button>
+          {PAGES && <button type="button" className="round-btn" aria-label="New page" onClick={() => setMaking(true)}>+</button>}
         </div>
       </Band>
       <div className="content">
-        {due.length > 0 && (
+        {PAGES && due.length > 0 && (
           <>
             <p className="section-label">Due today</p>
             <div className="card page-sheet"><Lines items={due} today={today} pageOf={pageName} /></div>
           </>
         )}
-        <p className="section-label">Pages</p>
-        <div className="card rows">
+        {PAGES && <p className="section-label">Pages</p>}
+        {PAGES && <div className="card rows">
           {data.lists.map((l) => (
             <button key={l.id} type="button" className="rowbtn" onClick={() => moreView.set({ kind: 'folder', id: l.id })}>
               <span className="ico"><ThingIcon name={l.icon} /></span>
@@ -51,7 +52,7 @@ function Hub() {
               <span className="chev" aria-hidden="true">›</span>
             </button>
           ))}
-        </div>
+        </div>}
         <p className="section-label">Settings</p>
         <div className="card rows">
           {SETTINGS_PAGES.map((p) => (

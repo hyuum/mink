@@ -9,6 +9,7 @@ import { Band, Bar, Card, CheckBox } from '../../ui/kit';
 import { IconPlus, IconStop, Sakura } from '../../ui/icons';
 import { ThingIcon } from '../../ui/things';
 import { BankReviewCard, useBankSuggestions } from '../money/bank';
+import { PAGES } from '../../app/features';
 
 export function Home() {
   const data = useData();
@@ -60,7 +61,7 @@ export function Home() {
 
       <div className="content">
         <BankReviewCard suggestions={bank} />
-        {(dueRoutines.length > 0 || pinned.length > 0) && (
+        {PAGES && (dueRoutines.length > 0 || pinned.length > 0) && (
           <button type="button" className="card home-due" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>
             {dueRoutines.length > 0 && <span><b>Due today</b> · {dueRoutines.map((d) => d.item.name).join(', ')}</span>}
             {pinned.map((t) => {
@@ -125,7 +126,7 @@ export function Home() {
           )}
         </Card>
 
-        <Card title="Today's tasks" action={<button className="card-link" onClick={() => go('tasks')}>All tasks</button>}>
+        {PAGES && <Card title="Today's tasks" action={<button className="card-link" onClick={() => go('tasks')}>All tasks</button>}>
           {dueTasks.length === 0 && doneToday.length === 0 && <p className="muted" style={{ fontSize: 14, padding: '6px 0' }}>Nothing due today.</p>}
           <ul className="items">
             {[...dueTasks, ...doneToday].map((t) => (
@@ -145,7 +146,7 @@ export function Home() {
             <input id="home-new-task" value={newTask} onChange={(e) => setNewTask(e.target.value)} placeholder="Add a task for today…  #tag  !!" enterKeyHint="done" />
             <button className="icon-btn" aria-label="Add task" type="submit"><IconPlus size={20} /></button>
           </form>
-        </Card>
+        </Card>}
       </div>
     </>
   );

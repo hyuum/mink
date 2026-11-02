@@ -53,9 +53,6 @@ export function setDockLabels(v: boolean) {
   try { localStorage.setItem(LABELS_KEY, v ? '1' : '0'); } catch { /* storage blocked: still works this session */ }
 }
 
-/** True once a newer version of the app has been downloaded and is ready to show. */
-export const updateReady = createStore<boolean>(false);
-
 /* More: the folder hub, one folder, or one settings page. */
 export type MoreView = { kind: 'hub' } | { kind: 'folder'; id: string } | { kind: 'settings'; page: 'display' | 'time' | 'spend' | 'app' };
 export const moreView = createStore<MoreView>({ kind: 'hub' });
