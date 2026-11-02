@@ -10,12 +10,14 @@ import { IconChoice, ThingIcon } from '../../ui/things';
 import { SETTINGS_PAGES, Settings } from './More';
 import { Lines, PageView } from './Page';
 import { PAGES } from '../../app/features';
+import { IconGem, Store } from '../dailies/Dailies';
 
 export function More() {
   const view = moreView.use();
   useEffect(() => { window.scrollTo({ top: 0 }); }, [view]);
   if (view.kind === 'settings') return <Settings page={view.page} />;
   if (view.kind === 'folder' && PAGES) return <PageView id={view.id} />;
+  if (view.kind === 'store') return <Store />;
   return <Hub />;
 }
 
@@ -53,6 +55,12 @@ function Hub() {
             </button>
           ))}
         </div>}
+        <div className="card rows">
+          <button type="button" className="rowbtn short" onClick={() => moreView.set({ kind: 'store' })}>
+            <span className="ico gem-ico"><IconGem size={18} /></span>
+            <span className="grow"><b>Store</b><small>{data.rewards.gems} gems · colour themes</small></span><span className="chev" aria-hidden="true">›</span>
+          </button>
+        </div>
         <p className="section-label">Settings</p>
         <div className="card rows">
           {SETTINGS_PAGES.map((p) => (

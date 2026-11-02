@@ -39,6 +39,16 @@ function createStore<T>(initial: T) {
   };
 }
 
+/* A daily just finished: a short celebration at the top of the screen. */
+export interface Celebration { key: number; text: string; gems: number; big: boolean }
+export const celebration = createStore<Celebration | null>(null);
+let celebrateTimer: ReturnType<typeof setTimeout> | undefined;
+export function celebrate(text: string, gems: number, big = false) {
+  clearTimeout(celebrateTimer);
+  celebration.set({ key: Date.now(), text, gems, big });
+  celebrateTimer = setTimeout(() => celebration.set(null), big ? 3800 : 2600);
+}
+
 /* Time screens: the day being looked at (null = today) and the paint brush, shared by Day and Week. */
 export const timeDay = createStore<string | null>(null);
 export const ERASE = 'erase';
@@ -54,7 +64,7 @@ export function setDockLabels(v: boolean) {
 }
 
 /* More: the folder hub, one folder, or one settings page. */
-export type MoreView = { kind: 'hub' } | { kind: 'folder'; id: string } | { kind: 'settings'; page: 'display' | 'time' | 'spend' | 'app' };
+export type MoreView = { kind: 'hub' } | { kind: 'folder'; id: string } | { kind: 'store' } | { kind: 'settings'; page: 'display' | 'time' | 'spend' | 'app' };
 export const moreView = createStore<MoreView>({ kind: 'hub' });
 /** The task list to show when Tasks opens (from its folder in More); null shows all. */
 export const taskListFilter = createStore<string | null>(null);

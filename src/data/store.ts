@@ -120,6 +120,7 @@ export function migrate(raw: unknown): AppData {
     trackers: arr(d.trackers, []).map((t) => withIcon(t, 'sparkles')),
     lines: arr(d.lines, []),
     notes: arr(d.notes, []),
+    rewards: { ...base.rewards, ...(d.rewards ?? {}), owned: Array.from(new Set(['matcha', ...(d.rewards?.owned ?? [])])) },
     // The daily time goal and stickers were removed; older saves drop them here.
     settings: { ...base.settings, ...withoutOld(d.settings), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
   });
@@ -486,6 +487,32 @@ export const actions = {
     const before = state;
     update((d) => ({ ...d, tasks: remove(d.tasks, id) }));
     return before;
+  },
+  /* Dailies, gems and themes */
+  /** Pays for a finished daily, once per day. Returns false when it was already paid. */
+  awardDaily(day: Day, id: string, gems: number): boolean {
+    if (state.rewards.days[day]?.done.includes(id)) return false;
+    update((d) => {
+      const today = d.rewards.days[day] ?? { done: [] };
+      return { ...d, rewards: { ...d.rewards, gems: d.rewards.gems + gems, days: { ...d.rewards.days, [day]: { ...today, done: [...today.done, id] } } } };
+    });
+    return true;
+  },
+  /** Pays the all-done bonus, once per day. */
+  awardBonus(day: Day, gems: number): boolean {
+    if (state.rewards.days[day]?.bonus) return false;
+    update((d) => {
+      const today = d.rewards.days[day] ?? { done: [] };
+      return { ...d, rewards: { ...d.rewards, gems: d.rewards.gems + gems, days: { ...d.rewards.days, [day]: { ...today, bonus: gems } } } };
+    });
+    return true;
+  },
+  /** Buys a theme and starts using it. Returns false when there aren't enough gems. */
+  buyPalette(id: string, price: number): boolean {
+    if (state.rewards.owned.includes(id)) { actions.updateSettings({ palette: id }); return true; }
+    if (state.rewards.gems < price) return false;
+    update((d) => ({ ...d, rewards: { ...d.rewards, gems: d.rewards.gems - price, owned: [...d.rewards.owned, id] }, settings: { ...d.settings, palette: id } }));
+    return true;
   },
   /** Saves a day's note; an empty note is removed so the day drops out of the journal. */
   setNote(day: Day, text: string) {

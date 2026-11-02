@@ -12,6 +12,7 @@ import { Money } from '../features/money/Money';
 import { Tasks } from '../features/tasks/Tasks';
 import { More } from '../features/more/Hub';
 import { QuickAdd } from '../features/add/QuickAdd';
+import { CelebrationHost, useDailyRewards } from '../features/dailies/Dailies';
 
 const SCREENS = { home: Home, time: TimeDay, week: TimeWeek, stats: TimeSummary, journal: Journal, money: Money, tasks: Tasks, more: More };
 const TITLES = { home: 'Home', time: 'Time', week: 'Week', stats: 'Time stats', journal: 'Journal', money: 'Money', tasks: 'Tasks', more: 'More' };
@@ -29,11 +30,22 @@ function useTheme(theme: 'system' | 'light' | 'dark') {
   }, [theme]);
 }
 
+/** The colour theme bought in the Store; Matcha needs nothing set. */
+function usePalette(palette: string) {
+  useEffect(() => {
+    const root = document.documentElement;
+    if (palette && palette !== 'matcha') root.dataset.palette = palette;
+    else delete root.dataset.palette;
+  }, [palette]);
+}
+
 export function App() {
   const ready = useReady();
   const data = useData();
   const route = useRoute();
   useTheme(data.settings.theme);
+  usePalette(data.settings.palette);
+  useDailyRewards();
   useEffect(() => { document.title = `${TITLES[route]} · Matcha Planner`; }, [route]);
   // Leaving the painting screens puts the brush down.
   useEffect(() => { if (route !== 'time' && route !== 'week') brush.set(null); }, [route]);
@@ -49,6 +61,7 @@ export function App() {
       <BottomNav />
       <QuickAdd />
       <ToastHost />
+      <CelebrationHost />
     </>
   );
 }

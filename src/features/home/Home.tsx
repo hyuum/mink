@@ -10,6 +10,7 @@ import { IconPlus, IconStop, Sakura } from '../../ui/icons';
 import { ThingIcon } from '../../ui/things';
 import { BankReviewCard, useBankSuggestions } from '../money/bank';
 import { PAGES } from '../../app/features';
+import { DailiesCard } from '../dailies/Dailies';
 
 export function Home() {
   const data = useData();
@@ -60,6 +61,7 @@ export function Home() {
       </Band>
 
       <div className="content">
+        <DailiesCard />
         <BankReviewCard suggestions={bank} />
         {PAGES && (dueRoutines.length > 0 || pinned.length > 0) && (
           <button type="button" className="card home-due" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>

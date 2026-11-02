@@ -202,8 +202,18 @@ export interface Settings {
   /** Spending allowance per Monday–Sunday week, in cents. A month's allowance is 4 × this. */
   weeklyAllowance: number;
   theme: 'system' | 'light' | 'dark';
+  /** The colour theme in use (see PALETTES); bought with gems. */
+  palette: string;
   phone: PhoneSettings;
   bank: BankSettings;
+}
+
+/** Dailies and gems: what each day's dailies paid out, the gems to spend, and the themes bought. */
+export interface Rewards {
+  gems: number;
+  /** Per day: the dailies already paid for, and whether the all-done bonus was. */
+  days: Record<Day, { done: string[]; bonus?: number }>;
+  owned: string[];
 }
 
 /** The note written at the end of a day. Days without one simply don't appear in the journal. */
@@ -235,5 +245,6 @@ export interface AppData {
   trackers: TrackerItem[];
   lines: TextLine[];
   notes: DayNote[];
+  rewards: Rewards;
   settings: Settings;
 }

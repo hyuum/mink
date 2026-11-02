@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { addDays, fmtClock, fmtDuration, fmtHM, hourLabel, msAt, weekStart } from '../src/lib/dates.ts';
 import { fmtMoney, parseAmount, pressKey } from '../src/lib/money.ts';
-import { avgMin, bankSuggestions, bedMinFromClock, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
+import { avgMin, bankSuggestions, bedMinFromClock, bonusFor, dailies, dayCoverage, streakBefore, milestoneName, milestonesForDay, dayTotals, groupTasks, monthSpend, nextDue, pageItems, pageSummary, paintRange, parseBankNote, parseLine, parseTaskInput, pastAim, rangeSummary, repeatDue, repeatText, unloggedMin, upcomingBills, weekDays, weekSpend, tasksForToday } from '../src/data/logic.ts';
 import { defaultData, sampleData } from '../src/data/seed.ts';
 import { migrate } from '../src/data/store.ts';
 import type { Expense, Task, TimeEntry, TrackerItem } from '../src/data/types.ts';
@@ -401,4 +401,38 @@ test('page summaries name what is due and counts past their aim', () => {
   };
   assert.equal(pageSummary(data, 'p', today), 'Laundry due · 40 days since called grandma');
   assert.equal(pastAim(data.trackers[1], today), true);
+});
+
+test('dailies: yesterday counts as filled with sleep, today needs its note, reviews wait for the evening', () => {
+  const today = '2026-10-22';
+  const y = '2026-10-21';
+  const base = defaultData();
+  const at = (day: string, h: number, m = 0) => msAt(day, h * 60 + m);
+  // Woke at 7, bed at 11 pm, logged 7 am to 11 pm in two blocks.
+  const data = {
+    ...base,
+    entries: [
+      { id: 'a', label: '', categoryId: 'uni', start: at(y, 7), end: at(y, 15), source: 'paint' as const },
+      { id: 'b', label: '', categoryId: 'rest', start: at(y, 15), end: at(y, 23), source: 'paint' as const },
+    ],
+    milestones: [{ id: 'w', kind: 'wake' as const, label: '', day: y, min: 7 * 60 }, { id: 'z', kind: 'bed' as const, label: '', day: y, min: 23 * 60 }],
+    notes: [{ day: today, text: 'Good day', updatedAt: 0 }],
+  };
+  assert.equal(dayCoverage(data, y, at(today, 9)), 24 * 60);
+  const morning = dailies(data, today, at(today, 9), { phoneOn: true, phonePending: 0, bankOn: false, bankPending: 0 });
+  assert.deepEqual(morning.map((d) => [d.id, d.done]), [['phone', false], ['hours', true], ['note', true]]);
+  const evening = dailies(data, today, at(today, 19), { phoneOn: true, phonePending: 0, bankOn: false, bankPending: 0 });
+  assert.equal(evening[0].done, true);
+  const waiting = dailies(data, today, at(today, 19), { phoneOn: true, phonePending: 2, bankOn: false, bankPending: 0 });
+  assert.equal(waiting[0].done, false);
+  const gap = { ...data, entries: data.entries.slice(0, 1) };
+  assert.equal(dailies(gap, today, at(today, 9), { phoneOn: false, phonePending: 0, bankOn: false, bankPending: 0 })[0].done, false);
+});
+
+test('streaks are strict: a missed day starts again, and the bonus grows to +10', () => {
+  const r = { gems: 0, owned: ['matcha'], days: { '2026-10-19': { done: [], bonus: 20 }, '2026-10-20': { done: [], bonus: 22 }, '2026-10-21': { done: [], bonus: 24 } } };
+  assert.equal(streakBefore(r, '2026-10-22'), 3);
+  assert.equal(streakBefore(r, '2026-10-23'), 0);
+  assert.equal(bonusFor(3), 26);
+  assert.equal(bonusFor(9), 30);
 });

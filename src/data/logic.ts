@@ -1,5 +1,5 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
-import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, SpendKind, Task, TextLine, TimeEntry, TrackerItem } from './types';
+import type { AppData, Bill, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, Rewards, SpendKind, Task, TextLine, TimeEntry, TrackerItem } from './types';
 import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 import { MILESTONE_KINDS } from './seed';
 
@@ -429,6 +429,82 @@ export function pageSummary(data: Pick<AppData, 'tasks' | 'trackers' | 'lines'>,
   if (open.length) return open.slice(0, 2).join(', ');
   return items.length ? 'Nothing due' : 'Empty';
 }
+
+/* ---------- Dailies, gems and themes ---------- */
+
+/** Colour themes, bought with gems. The colours themselves live in app.css under [data-palette]. */
+export const PALETTES: { id: string; name: string; price: number; swatch: [string, string, string] }[] = [
+  { id: 'matcha', name: 'Matcha', price: 0, swatch: ['#4B6545', '#DCE8CF', '#F6F5EE'] },
+  { id: 'sakura', name: 'Sakura', price: 40, swatch: ['#B03F64', '#FBE7EC', '#FBF5F5'] },
+  { id: 'hojicha', name: 'Hojicha', price: 60, swatch: ['#7A5236', '#F1E5D9', '#F8F3EC'] },
+  { id: 'yuzu', name: 'Yuzu', price: 60, swatch: ['#8A6A00', '#F6EDC8', '#FBF8EC'] },
+  { id: 'blueberry', name: 'Blueberry', price: 80, swatch: ['#3E5A9B', '#E3E9F6', '#F4F6FA'] },
+  { id: 'lavender', name: 'Lavender', price: 80, swatch: ['#6B5A9C', '#ECE7F6', '#F7F5FA'] },
+  { id: 'sumi', name: 'Sumi ink', price: 120, swatch: ['#2B2B2B', '#ECEAE5', '#F5F4F0'] },
+  { id: 'koi', name: 'Koi', price: 120, swatch: ['#C2502B', '#FBE6DC', '#FBF6F2'] },
+];
+
+export type DailyId = 'phone' | 'bank' | 'hours' | 'note';
+export interface Daily { id: DailyId; name: string; gems: number; done: boolean; detail: string; progress?: number }
+/** What the dailies need from outside the data: whether phone and bank review are on, and what's waiting. */
+export interface DailyContext { phoneOn: boolean; phonePending: number; bankOn: boolean; bankPending: number }
+
+/** Reviews count as finished from this hour if nothing came up to review all day. */
+const EVENING = 18;
+
+/** Minutes of a day accounted for: logged time, plus sleep before wake-up and after bedtime. */
+export function dayCoverage(data: Pick<AppData, 'entries' | 'milestones'>, day: Day, now: number): number {
+  const from = dayStartMs(day);
+  const to = dayStartMs(addDays(day, 1));
+  const spans: [number, number][] = data.entries.map((e) => [Math.max(e.start, from), Math.min(entryEnd(e, now), to)] as [number, number]).filter(([a, b]) => b > a);
+  const wake = wakeOf(data.milestones, day);
+  const bed = bedOf(data.milestones, day);
+  if (wake) spans.push([from, from + wake.min * MIN_MS]);
+  if (bed && bed.min < 24 * 60) spans.push([from + bed.min * MIN_MS, to]);
+  spans.sort((a, b) => a[0] - b[0]);
+  let covered = 0;
+  let cursor = from;
+  for (const [a, b] of spans) {
+    if (b <= cursor) continue;
+    covered += b - Math.max(a, cursor);
+    cursor = b;
+  }
+  return Math.round(covered / MIN_MS);
+}
+
+/** Today's dailies that apply, finished or not. */
+export function dailies(data: AppData, today: Day, now: number, c: DailyContext): Daily[] {
+  const isToday = (ms: number) => toISO(new Date(ms)) === today;
+  const evening = new Date(now).getHours() >= EVENING;
+  const out: Daily[] = [];
+  if (c.phoneOn) {
+    const reviewed = data.entries.some((e) => e.source === 'device' && isToday(e.start)) || data.phoneDismissed.some((k) => isToday(Number(k.split(':')[1])));
+    const done = c.phonePending === 0 && (reviewed || evening);
+    out.push({ id: 'phone', name: 'Review today’s phone use', gems: 5, done, detail: c.phonePending ? `${c.phonePending} to review` : done ? 'All reviewed' : 'Nothing yet: checks again this evening' });
+  }
+  if (c.bankOn) {
+    const reviewed = data.expenses.some((e) => e.bankKey && isToday(e.createdAt)) || data.bankDismissed.some((k) => isToday(Number(k.split(':')[1])));
+    const done = c.bankPending === 0 && (reviewed || evening);
+    out.push({ id: 'bank', name: 'Review today’s spends', gems: 5, done, detail: c.bankPending ? `${c.bankPending} to review` : done ? 'All reviewed' : 'Nothing yet: checks again this evening' });
+  }
+  const yesterday = addDays(today, -1);
+  const covered = dayCoverage(data, yesterday, now);
+  // A few minutes short still counts: the edges of blocks rarely meet to the minute.
+  out.push({ id: 'hours', name: 'Fill in all of yesterday', gems: 10, done: covered >= 24 * 60 - 10, detail: `${Math.floor(covered / 60)} of 24 hours`, progress: Math.min(1, covered / (24 * 60)) });
+  const note = data.notes.find((n) => n.day === today && n.text.trim());
+  out.push({ id: 'note', name: 'Write today’s note', gems: 5, done: Boolean(note), detail: note ? 'Written' : 'A line or two at the end of the day' });
+  return out;
+}
+
+/** Days in a row with every daily done, up to yesterday. Strict: one missed day starts it again. */
+export function streakBefore(r: Rewards, today: Day): number {
+  let n = 0;
+  for (let d = addDays(today, -1); r.days[d]?.bonus; d = addDays(d, -1)) n++;
+  return n;
+}
+export const streakNow = (r: Rewards, today: Day) => streakBefore(r, today) + (r.days[today]?.bonus ? 1 : 0);
+/** The all-done bonus: 20, plus 2 for each day of the streak so far, up to 10 more. */
+export const bonusFor = (streak: number) => 20 + Math.min(10, streak * 2);
 
 /* ---------- Milestones ---------- */
 

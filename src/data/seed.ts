@@ -86,7 +86,8 @@ export function defaultData(): AppData {
     trackers: [],
     lines: [],
     notes: [],
-    settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
+    rewards: { gems: 0, days: {}, owned: ['matcha'] },
+    settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', palette: 'matcha', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
   };
 }
 
