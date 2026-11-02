@@ -92,6 +92,13 @@ function ReviewBody({ suggestions, cats, onClose }: { suggestions: PhoneSuggesti
         <button type="button" className="btn green grow" disabled={!chosen.length} onClick={approve}>Approve {chosen.length > 1 ? chosen.length : ''}</button>
         <button type="button" className="btn ghost" disabled={!chosen.length} onClick={dismiss}>Dismiss</button>
       </div>
+      {suggestions.length > 1 && (
+        <button type="button" className="card-link quiet" style={{ alignSelf: 'center' }} onClick={() => {
+          const before = actions.dismissPhone(suggestions.map((s) => s.key));
+          showToast(`Dismissed all ${suggestions.length}`, before);
+          onClose();
+        }}>None of these: dismiss all {suggestions.length}</button>
+      )}
     </div>
   );
 }

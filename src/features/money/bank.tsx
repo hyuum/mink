@@ -55,7 +55,10 @@ export function BankReviewCard({ suggestions }: { suggestions: BankSuggestion[] 
           <p className="num" style={{ fontSize: 24 }}>{fmtMoney(total)}</p>
           <p className="small muted">{suggestions.length === 1 ? '1 from your notifications' : `${suggestions.length} from your notifications`}</p>
         </div>
-        <button type="button" className="btn green" onClick={() => setOpen(true)}>Review</button>
+        <div className="stack" style={{ gap: 4, alignItems: 'flex-end' }}>
+          <button type="button" className="btn green" onClick={() => setOpen(true)}>Review</button>
+          <button type="button" className="card-link quiet" onClick={() => dismissAll(suggestions)}>Dismiss all</button>
+        </div>
       </div>
       <Sheet open={open} onClose={() => setOpen(false)} label="Spends to review">
         {open && <ReviewBody suggestions={suggestions} onClose={() => setOpen(false)} />}
@@ -65,6 +68,12 @@ export function BankReviewCard({ suggestions }: { suggestions: BankSuggestion[] 
 }
 
 interface Row { on: boolean; note: string; kind: SpendKind }
+
+/** Clears the whole review at once, for days when none of it was a real spend. */
+function dismissAll(suggestions: BankSuggestion[]) {
+  const before = actions.dismissBank(suggestions.map((s) => s.key));
+  showToast(`Dismissed all ${suggestions.length}`, before);
+}
 
 function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; onClose: () => void }) {
   const today = todayISO();
@@ -137,6 +146,7 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
       </div>
       <div className="row" style={{ gap: 8 }}>
         <button type="button" className="btn ghost" disabled={!chosen.length} onClick={dismiss}>Dismiss</button>
+        <button type="button" className="btn ghost" onClick={() => { dismissAll(suggestions); onClose(); }}>Dismiss all</button>
         <button type="button" className="btn green grow" disabled={!chosen.length} onClick={approve}>{chosen.length ? `Approve ${chosen.length} · ${fmtMoney(sum)}` : 'Approve'}</button>
       </div>
     </div>

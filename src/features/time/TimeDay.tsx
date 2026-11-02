@@ -627,11 +627,12 @@ export function TimeDay() {
           </div>
         )}
         {!planMode && phone.length > 0 && (
-          <button type="button" className="card phone-banner" onClick={() => setReview({ focus: null })}>
+          <div className="card phone-banner">
             <IconPhone size={18} />
             <span className="grow">{phone.length === 1 ? '1 stretch' : `${phone.length} stretches`} of phone use to review</span>
-            <b>Review</b>
-          </button>
+            <button type="button" className="card-link quiet" onClick={() => { const before = actions.dismissPhone(phone.map((s) => s.key)); showToast(`Dismissed all ${phone.length}`, before); }}>Dismiss all</button>
+            <button type="button" className="btn green" onClick={() => setReview({ focus: null })}>Review</button>
+          </div>
         )}
         <div className="card" style={{ padding: '4px 0 6px' }}>
           <div className="row small muted" style={{ justifyContent: 'space-between', padding: '8px 16px 4px', flexWrap: 'wrap', gap: '2px 10px' }}>

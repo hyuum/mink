@@ -470,6 +470,8 @@ a.btn { text-decoration: none; }
 .tblock.phone .lbl strong { display: inline-flex; align-items: center; gap: 4px; font-weight: 400; }
 .phone-banner { display: flex; align-items: center; gap: 10px; width: 100%; border: none; text-align: left; color: var(--ink); font-size: 14px; }
 .phone-banner b { color: var(--green-strong); }
+.phone-banner .btn { min-height: 36px; padding: 0 14px; font-size: 13.5px; flex: none; }
+.phone-banner .card-link { flex: none; }
 .phone-list { display: grid; gap: 8px; max-height: 50vh; overflow-y: auto; }
 .phone-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1.5px solid var(--line); border-radius: 14px; }
 .phone-row input[type="checkbox"] { width: 20px; height: 20px; accent-color: var(--done); flex: none; }
