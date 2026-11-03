@@ -745,7 +745,12 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .themes { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .theme-card { background: var(--card); border-radius: 16px; padding: 10px; display: flex; flex-direction: column; gap: 8px; border: 2px solid transparent; box-shadow: var(--shadow); }
 .theme-card.on { border-color: var(--done); }
-.theme-swatch { height: 64px; border-radius: 12px; overflow: hidden; display: grid; grid-template-columns: 2fr 1fr 1fr; }
+.theme-swatch { height: 64px; width: 100%; padding: 0; border: none; border-radius: 12px; overflow: hidden; display: grid; grid-template-columns: 2fr 1fr 1fr; cursor: pointer; }
+.theme-swatch[aria-pressed="true"] { outline: 3px solid var(--ink); outline-offset: 2px; }
+.theme-swatch:disabled { cursor: default; }
+.skin-card { gap: 10px; }
+.skin-card .btn.ghost { min-height: 38px; }
+.skin-card .btn.ghost[aria-pressed="true"] { background: var(--soft); }
 .theme-row { display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .theme-row b { font-size: 14.5px; }
 .theme-row .btn { min-height: 34px; padding: 0 12px; font-size: 13px; display: inline-flex; gap: 4px; align-items: center; }
@@ -771,3 +776,95 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .dailies-ring::after { content: ""; width: 18px; height: 18px; border-radius: 50%; background: var(--card); }
 .dailies-gems { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
 .dailies-gems svg { color: var(--gem); }
+
+/* ===================================================================================================
+   Skin: Pixel Hearth. A cosy pixel-art inn: cream parchment panels in dark wooden frames on a tan,
+   planked floor, Pixelify Sans for everything, square corners, hard drop shadows, chunky square-capped
+   icons, dithered blocks, and animations that move in little steps. It sets data-theme="light" itself.
+   =================================================================================================== */
+:root[data-skin="hearth"] {
+  --paper: #E9D4A7; --card: #FCF1D6; --ink: #3D2614; --muted: #6A4A2D; --line: #C99E66; --soft: #F3DFB3; --track: #EAD3A2;
+  --band: #8A4F24; --band-ink: #3D2614; --band-muted: #6A4A2D; --band-chip: rgba(61, 38, 20, .09); --band-chip-on: #8A4F24; --band-chip-on-ink: #FCF1D6;
+  --accent: #B8432B; --accent-ink: #FFF4DA; --pink: #D9707E; --need: #6F9338; --want: #D9707E; --pink-soft: #F7D6C6; --pink-ink: #8C2F25;
+  --green: #7FA341; --green-strong: #4C6A1F; --check: #5F8530; --done: #5F8530; --done-ink: #FCF1D6; --warn-soft: #F8DCC6;
+  --frame: #6B3E1C; --frame-hi: #FFF9E8; --frame-lo: #E2C792;
+  --shadow: 4px 4px 0 rgba(61, 38, 20, .32); --scrim: rgba(45, 26, 10, .55); --sticker: #FCF1D6;
+  --gem: #2B8FA6; --gem-soft: #CDEBEE; --sleep: #D5C3DF; --wake: #D9707E; --bed: #7D68A8; --late: #B8661A; --faint: #A9865A;
+  --font-display: 'Pixelify Sans', 'Courier New', monospace; --font-body: 'Pixelify Sans', 'Courier New', monospace;
+  color-scheme: light;
+}
+/* Everything goes square. Inline radii on timeline blocks included. */
+:root[data-skin="hearth"] *, :root[data-skin="hearth"] *::before, :root[data-skin="hearth"] *::after { border-radius: 0 !important; }
+/* Motion moves in steps, like sprites. */
+:root[data-skin="hearth"] *, :root[data-skin="hearth"] *::before, :root[data-skin="hearth"] *::after {
+  transition-timing-function: steps(3, end) !important; animation-timing-function: steps(5, end) !important;
+}
+:root[data-skin="hearth"] body { font-size: 16px; letter-spacing: .01em; }
+/* Floor: wide planks with a faint dither. */
+:root[data-skin="hearth"] body::before { opacity: 1; filter: none;
+  background-image: repeating-linear-gradient(180deg, transparent 0 62px, rgba(107, 62, 28, .16) 62px 64px),
+    repeating-linear-gradient(90deg, transparent 0 2px, rgba(107, 62, 28, .045) 2px 4px),
+    repeating-linear-gradient(180deg, transparent 0 2px, rgba(107, 62, 28, .045) 2px 4px); }
+:root[data-skin="hearth"] .band h1 { font-weight: 600; text-shadow: 2px 2px 0 #E0B46A; }
+:root[data-skin="hearth"] .num { font-weight: 600; }
+/* Panels: a dark wooden frame, a light bevel inside, a hard shadow outside. */
+:root[data-skin="hearth"] .card, :root[data-skin="hearth"] .theme-card, :root[data-skin="hearth"] .selbar, :root[data-skin="hearth"] .celebrate,
+:root[data-skin="hearth"] .dailies-chip, :root[data-skin="hearth"] .look-opt, :root[data-skin="hearth"] .act-chip {
+  border: 3px solid var(--frame); box-shadow: inset 2px 2px 0 var(--frame-hi), inset -2px -2px 0 var(--frame-lo), var(--shadow);
+}
+:root[data-skin="hearth"] .theme-card.on, :root[data-skin="hearth"] .look-opt[aria-checked="true"] { border-color: var(--done); box-shadow: inset 0 0 0 2px var(--done), var(--shadow); }
+:root[data-skin="hearth"] .act-chip.hit { border-color: var(--done); }
+:root[data-skin="hearth"] .sheet { border: 3px solid var(--frame); border-bottom: none; box-shadow: inset 2px 2px 0 var(--frame-hi); animation: hearth-up .28s steps(4, end) both !important; }
+@keyframes hearth-up { from { transform: translateY(48px); opacity: .4; } }
+:root[data-skin="hearth"] .sheet .grabber { height: 4px; background: var(--line); }
+:root[data-skin="hearth"] .toast { border: 3px solid #1F120A; background: #3D2614; color: #FCF1D6; box-shadow: 4px 4px 0 rgba(31, 18, 10, .4); }
+/* Buttons press down into their shadow. */
+:root[data-skin="hearth"] .btn { border: 2px solid var(--frame); box-shadow: 3px 3px 0 var(--frame); font-weight: 500; }
+:root[data-skin="hearth"] .btn:active:not(:disabled) { transform: translate(3px, 3px); box-shadow: none; }
+:root[data-skin="hearth"] .btn:disabled { box-shadow: none; opacity: .55; }
+:root[data-skin="hearth"] .btn.ghost, :root[data-skin="hearth"] .btn.danger { border-color: var(--frame); }
+:root[data-skin="hearth"] .chip, :root[data-skin="hearth"] .field input, :root[data-skin="hearth"] .field select, :root[data-skin="hearth"] .field textarea,
+:root[data-skin="hearth"] .field-input, :root[data-skin="hearth"] .cat-name, :root[data-skin="hearth"] .note-box, :root[data-skin="hearth"] .cat-look { border: 2px solid var(--line); }
+:root[data-skin="hearth"] .note-box { background: var(--soft); }
+/* Icons: chunky, square-capped, no anti-aliasing. */
+:root[data-skin="hearth"] svg { shape-rendering: crispEdges; }
+:root[data-skin="hearth"] svg [stroke-linecap], :root[data-skin="hearth"] svg path, :root[data-skin="hearth"] svg line, :root[data-skin="hearth"] svg rect, :root[data-skin="hearth"] svg circle { stroke-linecap: square; stroke-linejoin: miter; }
+:root[data-skin="hearth"] .nav svg, :root[data-skin="hearth"] .icon-btn svg { stroke-width: 2.4px; }
+/* The bottom bar is a wooden shelf. */
+:root[data-skin="hearth"] .nav { background: #7A4620; border-top: 3px solid #3D2614;
+  background-image: repeating-linear-gradient(90deg, transparent 0 94px, rgba(31, 18, 10, .25) 94px 96px), repeating-linear-gradient(180deg, transparent 0 22px, rgba(255, 220, 160, .12) 22px 24px); }
+:root[data-skin="hearth"] .nav a { color: #F3DFB3; }
+:root[data-skin="hearth"] .nav a[aria-current="page"] { color: #FFE08A; text-shadow: 1px 1px 0 #3D2614; }
+:root[data-skin="hearth"] .nav .add { box-shadow: 0 0 0 3px #3D2614, 4px 4px 0 3px rgba(31, 18, 10, .45); }
+/* The day: dithered blocks with a darker rim, chunky hour lines, a thick now-line. */
+:root[data-skin="hearth"] .timeline .hr::after { border-top: 2px dotted var(--line); }
+:root[data-skin="hearth"] .timeline .hr.odd::after { border-top-width: 1px; }
+:root[data-skin="hearth"] .now-line { border-top-width: 3px; }
+:root[data-skin="hearth"] .tl-col .tblock.entry.look-solid, :root[data-skin="hearth"] .tl-col .tblock.entry.look-soft,
+:root[data-skin="hearth"] .tl-col .tblock.entry.look-hatch { box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 55%, var(--ink)); }
+:root[data-skin="hearth"] .tl-col .tblock.entry:not(.look-line)::after { content: ""; position: absolute; inset: 0; pointer-events: none; z-index: 1;
+  background-image: repeating-linear-gradient(45deg, rgba(61, 38, 20, .09) 0 2px, transparent 2px 4px); }
+:root[data-skin="hearth"] .tblock.sel { box-shadow: 0 0 0 3px var(--ink), 5px 5px 0 3px rgba(61, 38, 20, .35); }
+:root[data-skin="hearth"] .tblock .hd { border-width: 3px; background: #FFE08A; }
+:root[data-skin="hearth"] .tblock.plan { border-width: 3px; }
+:root[data-skin="hearth"] .range-preview { outline-width: 3px; }
+/* Dailies: the ring becomes a little jar that fills from the bottom. */
+:root[data-skin="hearth"] .dailies-ring { width: 20px; height: 22px; border: 2px solid var(--frame); background: linear-gradient(to top, var(--done) calc(var(--done-k, 0) * 100%), var(--soft) 0); }
+:root[data-skin="hearth"] .dailies-ring::after { display: none; }
+:root[data-skin="hearth"] .daily-bar, :root[data-skin="hearth"] .daily-bar i { height: 8px; }
+
+/* The skin's preview card in the Store: fixed colours, so it looks the same whatever is in use. */
+.skin-preview { position: relative; height: 128px; padding: 10px; display: grid; grid-template-columns: 1fr 1fr 1fr; grid-template-rows: auto 1fr; gap: 6px; align-items: end;
+  font-family: 'Pixelify Sans', 'Courier New', monospace; color: #3D2614; border: 3px solid #6B3E1C; border-radius: 0;
+  background-color: #E9D4A7; background-image: repeating-linear-gradient(180deg, transparent 0 30px, rgba(107, 62, 28, .18) 30px 32px); }
+.skin-preview .sp-title { grid-column: 1 / -1; align-self: start; font-size: 19px; font-weight: 600; text-shadow: 2px 2px 0 #E0B46A; }
+.skin-preview .sp-blk { height: 58px; padding: 4px 6px; font-size: 13px; align-self: stretch; background-color: color-mix(in srgb, var(--c) 70%, #FCF1D6);
+  background-image: repeating-linear-gradient(45deg, rgba(61, 38, 20, .1) 0 2px, transparent 2px 4px); box-shadow: inset 0 0 0 2px color-mix(in srgb, var(--c) 55%, #3D2614), 3px 3px 0 rgba(61, 38, 20, .3); }
+.skin-preview .sp-gem { position: absolute; right: 10px; top: 10px; display: inline-flex; gap: 3px; align-items: center; font-size: 13px; padding: 2px 6px; background: #FCF1D6; border: 2px solid #6B3E1C; }
+.skin-preview .sp-gem svg { color: #2B8FA6; }
+/* Brass nails in the corners of each panel. */
+:root[data-skin="hearth"] .card, :root[data-skin="hearth"] .theme-card, :root[data-skin="hearth"] .selbar {
+  background-image: linear-gradient(#C9A04A, #C9A04A), linear-gradient(#C9A04A, #C9A04A), linear-gradient(#C9A04A, #C9A04A), linear-gradient(#C9A04A, #C9A04A);
+  background-size: 4px 4px; background-repeat: no-repeat;
+  background-position: left 4px top 4px, right 4px top 4px, left 4px bottom 4px, right 4px bottom 4px;
+}

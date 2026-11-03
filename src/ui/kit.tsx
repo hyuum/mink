@@ -1,6 +1,7 @@
 // Shared building blocks used by every screen.
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
 import { IconCheck, IconClock, IconHome, IconMore, IconPlus, IconWallet } from './icons';
+import { createPortal } from 'react-dom';
 import { actions } from '../data/store';
 import { go, moreView, openQuickAdd, toast, useRoute, type Route } from '../app/ui-state';
 import type { SpendKind } from '../data/types';
@@ -123,13 +124,16 @@ export function Sheet({ open, onClose, label, children }: { open: boolean; onClo
   useEffect(() => { if (open) openedAt.current = performance.now(); }, [open]);
   const tooSoon = (e: SyntheticEvent) => { if (performance.now() - openedAt.current < GHOST_MS) { e.preventDefault(); e.stopPropagation(); } };
   if (!open) return null;
-  return (
+  // Rendered at the end of the page, so a sheet opened from inside a raised part (like the Home header)
+  // still sits above the bottom bar.
+  return createPortal(
     <div className="backdrop" onClickCapture={tooSoon} onMouseDownCapture={tooSoon} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1} style={{ outline: 'none' }}>
         <span className="grabber" aria-hidden="true" />
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
 

@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { useData, useReady } from '../data/store';
-import { brush, useRoute } from './ui-state';
+import { brush, tryOn, useRoute } from './ui-state';
+import { isSkin } from '../data/logic';
+import { loadSkinFont } from '../lib/fonts';
 import { PAGES } from './features';
 import { BottomNav, ToastHost } from '../ui/kit';
 import { Home } from '../features/home/Home';
@@ -30,12 +32,13 @@ function useTheme(theme: 'system' | 'light' | 'dark') {
   }, [theme]);
 }
 
-/** The colour theme bought in the Store; Matcha needs nothing set. */
+/** The colour theme or skin bought in the Store (or being tried on there); Matcha needs nothing set. */
 function usePalette(palette: string) {
   useEffect(() => {
     const root = document.documentElement;
     if (palette && palette !== 'matcha') root.dataset.palette = palette;
     else delete root.dataset.palette;
+    if (isSkin(palette)) { root.dataset.skin = palette; loadSkinFont(); } else delete root.dataset.skin;
   }, [palette]);
 }
 
@@ -43,8 +46,10 @@ export function App() {
   const ready = useReady();
   const data = useData();
   const route = useRoute();
-  useTheme(data.settings.theme);
-  usePalette(data.settings.palette);
+  const look = tryOn.use() ?? data.settings.palette;
+  // A skin brings its own colours, so it overrides the light/dark setting.
+  useTheme(isSkin(look) ? 'light' : data.settings.theme);
+  usePalette(look);
   useDailyRewards();
   useEffect(() => { document.title = `${TITLES[route]} · Matcha Planner`; }, [route]);
   // Leaving the painting screens puts the brush down.

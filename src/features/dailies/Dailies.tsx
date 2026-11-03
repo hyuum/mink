@@ -2,10 +2,11 @@
 // bonus for doing them all, which grows with a strict streak. Gems buy colour themes in the Store.
 import { useEffect, useRef, useState } from 'react';
 import { actions, useData, useReady } from '../../data/store';
-import { PALETTES, bonusFor, dailies, streakBefore, streakNow, type Daily } from '../../data/logic';
+import { PALETTES, SKINS, bonusFor, dailies, streakBefore, streakNow, type Daily } from '../../data/logic';
 import { addDays, todayISO } from '../../lib/dates';
 import { phoneAvailable } from '../../lib/phone';
-import { celebrate, celebration, go, moreView, showToast, useNow } from '../../app/ui-state';
+import { celebrate, celebration, go, moreView, showToast, tryOn, useNow } from '../../app/ui-state';
+import { loadSkinFont } from '../../lib/fonts';
 import { Band, Sheet } from '../../ui/kit';
 import { usePhoneSuggestions } from '../time/phone';
 import { useBankSuggestions } from '../money/bank';
@@ -131,9 +132,13 @@ export function Store() {
   const data = useData();
   const { gems, owned } = data.rewards;
   const current = data.settings.palette;
+  const trying = tryOn.use();
   const buy = (id: string, price: number, name: string) => {
+    tryOn.set(null);
     if (actions.buyPalette(id, price)) showToast(owned.includes(id) ? `Using ${name}` : `Bought ${name}`);
   };
+  // Trying something on lasts only while you're in the Store.
+  useEffect(() => { loadSkinFont(); return () => tryOn.set(null); }, []);
   return (
     <>
       <Band>
@@ -142,15 +147,47 @@ export function Store() {
           <h1>Store</h1>
           <span className="gem-count big" aria-label={`${gems} gems`}><IconGem />{gems}</span>
         </div>
-        <p className="band-sub">Themes change the app’s colours. Gems come from dailies.</p>
+        <p className="band-sub">Gems come from dailies. Tap a theme’s colours, or “Try it on”, to see it before you buy.</p>
       </Band>
       <div className="content">
+        <h2 className="section-label">Skins</h2>
+        {SKINS.map((k) => {
+          const has = owned.includes(k.id);
+          const on = k.id === current;
+          return (
+            <div key={k.id} className={`theme-card skin-card ${on ? 'on' : ''}`}>
+              <div className="skin-preview" aria-hidden="true">
+                <span className="sp-title">Good evening</span>
+                <span className="sp-blk" style={{ ['--c' as string]: '#8DBA78' }}>Uni</span>
+                <span className="sp-blk" style={{ ['--c' as string]: '#F4DDB0' }}>Meals</span>
+                <span className="sp-blk" style={{ ['--c' as string]: '#E58AA6' }}>Exercise</span>
+                <span className="sp-gem"><IconGem size={12} />{gems}</span>
+              </div>
+              <div className="theme-row">
+                <b>{k.name}</b>
+                {on ? <span className="small muted">In use</span>
+                  : has ? <button type="button" className="btn" onClick={() => buy(k.id, k.price, k.name)}>Use</button>
+                  : <button type="button" className="btn green" disabled={gems < k.price} onClick={() => buy(k.id, k.price, k.name)}><IconGem size={12} /> {k.price}</button>}
+              </div>
+              <small className="muted">{k.blurb} Always uses its own colours, whatever the light or dark setting.</small>
+              {!on && (
+                <button type="button" className="btn ghost" aria-pressed={trying === k.id} onClick={() => tryOn.set(trying === k.id ? null : k.id)}>
+                  {trying === k.id ? 'Stop trying on' : 'Try it on'}
+                </button>
+              )}
+              {!has && gems < k.price && <small className="muted">{k.price - gems} more gems</small>}
+            </div>
+          );
+        })}
+        <h2 className="section-label">Colours</h2>
         <div className="themes">
           {PALETTES.map((p) => {
             const has = owned.includes(p.id);
             return (
               <div key={p.id} className={`theme-card ${p.id === current ? 'on' : ''}`}>
-                <div className="theme-swatch" aria-hidden="true">{p.swatch.map((c) => <span key={c} style={{ background: c }} />)}</div>
+                <button type="button" className="theme-swatch" aria-pressed={trying === p.id} aria-label={`Try ${p.name} on`} disabled={p.id === current} onClick={() => tryOn.set(trying === p.id ? null : p.id)}>
+                  {p.swatch.map((c) => <span key={c} style={{ background: c }} />)}
+                </button>
                 <div className="theme-row">
                   <b>{p.name}</b>
                   {p.id === current ? <span className="small muted">In use</span>

@@ -9,7 +9,7 @@ import { PhoneSettingsCard } from '../time/phone';
 import { BankSettingsCard } from '../money/bank';
 import { phoneAvailable } from '../../lib/phone';
 import type { BlockLook, TimeCategory } from '../../data/types';
-import { LOOKS, lookOf } from '../../data/logic';
+import { LOOKS, SKINS, isSkin, lookOf } from '../../data/logic';
 
 const STORAGE_TEXT = {
   indexeddb: 'Saved on this device.',
@@ -79,6 +79,7 @@ export function Settings({ page }: { page: SettingsPage }) {
           <div className="stack" style={{ gap: 12 }}>
             <p className="label">Theme</p>
             <ChipGroup label="Theme" value={s.theme} onChange={(theme) => actions.updateSettings({ theme })} options={[{ value: 'system', label: 'Match device' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
+            {isSkin(s.palette) && <p className="small muted">{SKINS.find((k) => k.id === s.palette)?.name} uses its own colours, so this applies again once you switch back to a colour theme in the Store.</p>}
             <p className="label">Timeline starts at</p>
             <ChipGroup<string> label="Timeline start" value={String(s.dayStartHour)} onChange={(v) => actions.updateSettings({ dayStartHour: Number(v) })} options={[6, 7, 8, 9].map((h) => ({ value: String(h), label: `${h} am` }))} />
             <p className="label">Timeline ends at</p>

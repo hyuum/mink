@@ -39,6 +39,9 @@ function createStore<T>(initial: T) {
   };
 }
 
+/** A theme or skin being tried on in the Store; not saved, and cleared on leaving the Store. */
+export const tryOn = createStore<string | null>(null);
+
 /* A daily just finished: a short celebration at the top of the screen. */
 export interface Celebration { key: number; text: string; gems: number; big: boolean }
 export const celebration = createStore<Celebration | null>(null);

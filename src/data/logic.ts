@@ -475,6 +475,15 @@ export const PALETTES: { id: string; name: string; price: number; swatch: [strin
   { id: 'koi', name: 'Koi', price: 120, swatch: ['#C2502B', '#FBE6DC', '#FBF6F2'] },
 ];
 
+/**
+ * Skins change more than colours: fonts, icons, corners, how blocks are drawn and how things move.
+ * A skin brings its own colours, so it ignores the light/dark setting while it's on.
+ */
+export const SKINS: { id: string; name: string; price: number; blurb: string }[] = [
+  { id: 'hearth', name: 'Pixel Hearth', price: 200, blurb: 'A cosy pixel-art inn: parchment panels in wooden frames, a pixel font, chunky icons and blocks, and steppy little animations.' },
+];
+export const isSkin = (id: string | null | undefined) => SKINS.some((s) => s.id === id);
+
 export type DailyId = 'phone' | 'bank' | 'hours' | 'note';
 export interface Daily { id: DailyId; name: string; gems: number; done: boolean; detail: string; progress?: number }
 /** What the dailies need from outside the data: whether phone and bank review are on, and what's waiting. */
