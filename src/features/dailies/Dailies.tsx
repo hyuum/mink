@@ -1,12 +1,12 @@
 // Dailies: a few things to do each day that pay gems as soon as they're done (no claiming), plus a bigger
 // bonus for doing them all, which grows with a strict streak. Gems buy colour themes in the Store.
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { actions, useData, useReady } from '../../data/store';
 import { PALETTES, bonusFor, dailies, streakBefore, streakNow, type Daily } from '../../data/logic';
 import { addDays, todayISO } from '../../lib/dates';
 import { phoneAvailable } from '../../lib/phone';
 import { celebrate, celebration, go, moreView, showToast, useNow } from '../../app/ui-state';
-import { Band } from '../../ui/kit';
+import { Band, Sheet } from '../../ui/kit';
 import { usePhoneSuggestions } from '../time/phone';
 import { useBankSuggestions } from '../money/bank';
 
@@ -66,7 +66,26 @@ const DONE_TEXT: Record<Daily['id'], string> = {
 };
 
 /** The card at the top of Home. */
-export function DailiesCard() {
+/** A small chip by the Home greeting: a ring that fills as dailies get done, and your gems. Tap it for the list. */
+export function DailiesChip() {
+  const { data, list } = useToday();
+  const [open, setOpen] = useState(false);
+  const doneCount = list.filter((d) => d.done).length;
+  return (
+    <>
+      <button type="button" className="dailies-chip" onClick={() => setOpen(true)} aria-label={`Dailies: ${doneCount} of ${list.length} done, ${data.rewards.gems} gems. Open`}>
+        <span className="dailies-ring" style={{ ['--done-k' as string]: list.length ? doneCount / list.length : 0 }} aria-hidden="true" />
+        <span>{doneCount}/{list.length}</span>
+        <span className="dailies-gems"><IconGem size={12} />{data.rewards.gems}</span>
+      </button>
+      <Sheet open={open} onClose={() => setOpen(false)} label="Today's dailies">
+        <DailiesList onStore={() => setOpen(false)} />
+      </Sheet>
+    </>
+  );
+}
+
+function DailiesList({ onStore }: { onStore: () => void }) {
   const { data, today, list } = useToday();
   const paid = data.rewards.days[today];
   const doneCount = list.filter((d) => d.done).length;
@@ -74,10 +93,10 @@ export function DailiesCard() {
   const bonus = paid?.bonus ?? bonusFor(streakBefore(data.rewards, today));
   const week = Array.from({ length: 7 }, (_, i) => addDays(today, i - 6));
   return (
-    <section className="card dailies" aria-label="Today's dailies">
+    <section className="stack dailies" aria-label="Today's dailies">
       <div className="card-head">
-        <h2 className="card-title">Today’s dailies</h2>
-        <button type="button" className="gem-count" onClick={() => { moreView.set({ kind: 'store' }); go('more'); }} aria-label={`${data.rewards.gems} gems. Open the store`}>
+        <h2>Today’s dailies</h2>
+        <button type="button" className="gem-count" onClick={() => { onStore(); moreView.set({ kind: 'store' }); go('more'); }} aria-label={`${data.rewards.gems} gems. Open the store`}>
           <IconGem />{data.rewards.gems}
         </button>
       </div>

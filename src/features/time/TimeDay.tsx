@@ -58,7 +58,7 @@ const SMALL_GAP = 75;
  * A finger has to rest this long before dragging paints time or picks up a block, so a plain swipe scrolls
  * the day. Resting on a block selects it; only a selected block moves or resizes.
  */
-const ARM_MS = 280;
+const ARM_MS = 200;
 
 const TIP_KEY = 'matcha.dayTip';
 const readTipSeen = () => { try { return localStorage.getItem(TIP_KEY) === '1'; } catch { return false; } };
@@ -436,6 +436,17 @@ export function TimeDay() {
     }, ARM_MS);
   };
   useEffect(() => () => clearTimeout(armTimer.current), []);
+  // A tap anywhere off the day lets go of the selected block. Scrolling keeps it, so you can scroll to where it goes.
+  useEffect(() => {
+    if (!sel) return;
+    const onClick = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (!t.isConnected || t.closest('.tl-col, .selbar, .backdrop, .toast')) return;
+      setSel(null);
+    };
+    document.addEventListener('click', onClick);
+    return () => document.removeEventListener('click', onClick);
+  }, [sel !== null]);
   // Once armed, the finger paints or drags instead of scrolling the page.
   useEffect(() => {
     const el = col.current;

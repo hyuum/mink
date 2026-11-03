@@ -1,5 +1,5 @@
 // Shared building blocks used by every screen.
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type SyntheticEvent } from 'react';
 import { IconCheck, IconClock, IconHome, IconMore, IconPlus, IconWallet } from './icons';
 import { actions } from '../data/store';
 import { go, moreView, openQuickAdd, toast, useRoute, type Route } from '../app/ui-state';
@@ -94,6 +94,9 @@ export function Bar({ segments, max, height = 6 }: { segments: { value: number; 
   );
 }
 
+/** How long after a sheet opens a click still counts as the tap that opened it. */
+const GHOST_MS = 450;
+
 export function Sheet({ open, onClose, label, children }: { open: boolean; onClose: () => void; label: string; children: ReactNode }) {
   const ref = useRef<HTMLDivElement>(null);
   // Kept in a ref: a new onClose each render must not re-run the effect below, which would pull focus
@@ -114,9 +117,14 @@ export function Sheet({ open, onClose, label, children }: { open: boolean; onClo
       prev?.focus?.({ preventScroll: true });
     };
   }, [open]);
+  // The finger that opened a sheet (the second tap of a double-tap, say) also sends a click a moment later,
+  // which would land on whatever the sheet now shows under it. Clicks that soon after opening are dropped.
+  const openedAt = useRef(0);
+  useEffect(() => { if (open) openedAt.current = performance.now(); }, [open]);
+  const tooSoon = (e: SyntheticEvent) => { if (performance.now() - openedAt.current < GHOST_MS) { e.preventDefault(); e.stopPropagation(); } };
   if (!open) return null;
   return (
-    <div className="backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="backdrop" onClickCapture={tooSoon} onMouseDownCapture={tooSoon} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="sheet" role="dialog" aria-modal="true" aria-label={label} ref={ref} tabIndex={-1} style={{ outline: 'none' }}>
         <span className="grabber" aria-hidden="true" />
         {children}

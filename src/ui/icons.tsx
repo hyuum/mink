@@ -20,16 +20,6 @@ export const IconLeft = (p: P) => <S {...p}><path d="M15 5l-7 7 7 7" /></S>;
 export const IconRight = (p: P) => <S {...p}><path d="M9 5l7 7-7 7" /></S>;
 export const IconClose = (p: P) => <S {...p}><path d="M6 6l12 12M18 6L6 18" /></S>;
 
-export function Sakura({ size = 36 }: { size?: number }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
-      <g fill="#F8C9D5">
-        {[0, 72, 144, 216, 288].map((r) => <ellipse key={r} cx="12" cy="6.5" rx="3" ry="4" transform={`rotate(${r} 12 12)`} />)}
-      </g>
-      <circle cx="12" cy="12" r="2.2" fill="#F2C86B" />
-    </svg>
-  );
-}
 
 /* Milestones and painting */
 export const IconSun = (p: P) => <S {...p}><circle cx="12" cy="12" r="4" /><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8" /></S>;

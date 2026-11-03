@@ -5,11 +5,11 @@ import { dayStartMs, fmtClock, fmtDayLong, fmtDuration, greeting, hourLabel, iso
 import { fmtMoney, fmtMoneyShort } from '../../lib/money';
 import { go, moreView, showToast, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, CheckBox } from '../../ui/kit';
-import { IconPlus, IconStop, Sakura } from '../../ui/icons';
+import { IconPlus, IconStop } from '../../ui/icons';
 import { ThingIcon } from '../../ui/things';
 import { BankReviewCard, useBankSuggestions } from '../money/bank';
 import { PAGES } from '../../app/features';
-import { DailiesCard } from '../dailies/Dailies';
+import { DailiesChip } from '../dailies/Dailies';
 
 export function Home() {
   const data = useData();
@@ -55,12 +55,11 @@ export function Home() {
             <p className="band-sub">{fmtDayLong(today)}</p>
             <h1>{greeting(now)}</h1>
           </div>
-          <Sakura size={38} />
+          <DailiesChip />
         </div>
       </Band>
 
       <div className="content">
-        <DailiesCard />
         <BankReviewCard suggestions={bank} />
         {PAGES && (dueRoutines.length > 0 || pinned.length > 0) && (
           <button type="button" className="card home-due" onClick={() => { moreView.set({ kind: 'hub' }); go('more'); }}>

@@ -765,3 +765,9 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .phone-name { flex: 1 1 100%; min-width: 0; min-height: 36px; border: 1.5px dashed var(--line); border-radius: 10px; background: none; color: var(--ink); padding: 0 10px; font: inherit; font-size: 14px; }
 .phone-name:focus { outline: none; border-style: solid; border-color: var(--done); }
 .sub-stats { display: grid; gap: 2px; margin: 6px 0 0 12px; padding-left: 10px; border-left: 2px solid var(--line); }
+/* Dailies chip by the Home greeting. */
+.dailies-chip { flex: none; display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 4px; border: 1.5px solid var(--line); border-radius: 20px; background: var(--card); color: var(--ink); font: inherit; font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; cursor: pointer; }
+.dailies-ring { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; background: conic-gradient(var(--done) calc(var(--done-k, 0) * 1turn), var(--line) 0); }
+.dailies-ring::after { content: ""; width: 18px; height: 18px; border-radius: 50%; background: var(--card); }
+.dailies-gems { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.dailies-gems svg { color: var(--gem); }
