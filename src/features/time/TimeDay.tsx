@@ -3,7 +3,7 @@
 // to fill it in. "Edit plan" switches the timeline to the plan on its own, with templates.
 import { useEffect, useMemo, useRef, useState, type FormEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, useData } from '../../data/store';
-import { activityName, bedOf, dayTotals, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, joinsNeighbours, lookOf, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
+import { activityName, bedOf, dayTotals, phoneBlockName, type PhoneSuggestion, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, joinsNeighbours, lookOf, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
 import { go, showToast, timeDay, useNow } from '../../app/ui-state';
@@ -144,7 +144,8 @@ export function TimeDay() {
   const col = useRef<HTMLDivElement>(null);
   const fx = useRef<HTMLDivElement>(null);
   const gesture = useRef<Gesture | null>(null);
-  const hold = useRef<{ block: Block; t0: number; x: number; y: number; raf: number; water: HTMLElement | null } | null>(null);
+  // Holding a dashed block fills it in: a plan becomes logged time, a phone stretch is approved.
+  const hold = useRef<{ block: Block; phone?: PhoneSuggestion; t0: number; x: number; y: number; raf: number; water: HTMLElement | null } | null>(null);
   const cat = (id: ID): TimeCategory | undefined => data.timeCategories.find((c) => c.id === id);
   // Names you've given blocks before, newest first, for the picker to suggest.
   const pastNames = useMemo(() => {
@@ -195,7 +196,10 @@ export function TimeDay() {
   const bedMin = sleepDrag?.kind === 'bed' ? sleepDrag.min : bed?.min;
   // Bed after midnight stretches the day past midnight (up to 6 am), so the late hours can be logged here too.
   const nextDay = addDays(day, 1);
-  const maxH = !planMode && bedMin !== undefined && bedMin > 24 * 60 ? Math.min(30, Math.ceil(bedMin / 60) + 1) : 24;
+  // ...and so does logged time that runs past midnight, like a late night out.
+  const lateEnd = entries.reduce((m, e) => (e.start < dayStart + 86_400_000 ? Math.max(m, (entryEnd(e, now) - dayStart) / 60_000) : m), 0);
+  const lastMin = Math.max(bedMin ?? 0, lateEnd);
+  const maxH = !planMode && lastMin > 24 * 60 ? Math.min(30, Math.ceil(lastMin / 60) + 1) : 24;
   // ...and the next day opens with that night: the bedtime shows faded at the top, with the sleep after it.
   const prevDay = addDays(day, -1);
   const prevBed = bedOf(data.milestones, prevDay);
@@ -344,14 +348,14 @@ export function TimeDay() {
     requestAnimationFrame(tick);
   };
 
-  const startHold = (e: RPointerEvent<HTMLElement>, block: Block, el: HTMLElement) => {
+  const startHold = (e: RPointerEvent<HTMLElement>, block: Block, el: HTMLElement, phoneS?: PhoneSuggestion) => {
     e.preventDefault();
     e.currentTarget.setPointerCapture(e.pointerId);
     if (sel) setSel(null);
     const water = el.querySelector<HTMLElement>('.water');
     if (water) water.style.transition = 'none';
     setHolding(block.id);
-    const h = { block, t0: performance.now(), x: e.clientX, y: e.clientY, raf: 0, water };
+    const h = { block, phone: phoneS, t0: performance.now(), x: e.clientX, y: e.clientY, raf: 0, water };
     hold.current = h;
     const step = (t: number) => {
       if (hold.current !== h) return;
@@ -369,17 +373,23 @@ export function TimeDay() {
     cancelAnimationFrame(h.raf);
     if (h.water) { h.water.style.transition = 'height .35s ease-in'; h.water.style.height = '0%'; }
     setHolding(null);
-    if (quick) showToast('Hold the block until it fills');
+    // A tap on phone use opens it to look at or change; a tap on a plan explains the hold.
+    if (quick && h.phone) setReview({ focus: h.phone.key });
+    else if (quick) showToast('Hold the block until it fills');
   };
   const finishHold = () => {
     const h = hold.current;
     if (!h) return;
     hold.current = null;
     const b = h.block;
-    const { before } = actions.completePlan(b.id, Date.now(), b.startMin);
+    let before;
+    if (h.phone) {
+      const ph = h.phone;
+      before = actions.approvePhone([{ key: ph.key, start: ph.start, end: ph.end, categoryId: ph.categoryId, label: b.label, pkg: ph.apps[0]?.pkg }]);
+    } else before = actions.completePlan(b.id, Date.now(), b.startMin).before;
     setHolding(null);
     try { navigator.vibrate?.(18); } catch { /* not supported */ }
-    showToast(`${b.label || cat(b.categoryId)?.name} done · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
+    showToast(`${b.label || cat(b.categoryId)?.name} ${h.phone ? 'approved' : 'done'} · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
     const colour = cat(b.categoryId)?.color ?? '#8DBA78';
     const x0 = 0;
     requestAnimationFrame(() => {
@@ -461,7 +471,12 @@ export function TimeDay() {
     if (performance.now() - lastScroll.current < GLIDE_MS) { e.preventDefault(); return; }
     const t = e.target as HTMLElement;
     const ph = t.closest<HTMLElement>('[data-phone]');
-    if (ph) { setReview({ focus: ph.dataset.phone! }); return; }
+    const phS = ph ? phone.find((x) => x.key === ph.dataset.phone) : undefined;
+    if (ph && phS) {
+      const a = (phS.start - dayStart) / 60_000, z = (phS.end - dayStart) / 60_000;
+      startHold(e, { kind: 'entry', id: phS.key, categoryId: phS.categoryId, label: phoneBlockName(data.settings.phone, phS), startMin: a, endMin: z, fixed: false, live: false, ghost: true }, ph, phS);
+      return;
+    }
     const gap = t.closest<HTMLElement>('[data-gap]');
     if (gap) {
       const [a, b] = gap.dataset.gap!.split('-').map(Number);
@@ -652,7 +667,8 @@ export function TimeDay() {
   if (!planMode && day <= today) {
     const sorted = [...loggedV].sort((a, b) => a.startMin - b.startMin);
     for (let i = 0; i < sorted.length - 1; i++) {
-      const a = Math.ceil(sorted[i].endMin), b = Math.floor(sorted[i + 1].startMin);
+      // Only the awake part of a gap counts: no + in the night's sleep before waking or after bed.
+      const a = Math.max(Math.ceil(sorted[i].endMin), wakeMin ?? 0), b = Math.min(Math.floor(sorted[i + 1].startMin), bedMin ?? Infinity);
       if (b - a < SLOT || (nowMin !== null && b > nowMin) || plansV.some((p) => p.startMin < b && p.endMin > a)) continue;
       gaps.push({ from: a, to: b });
     }
@@ -733,7 +749,7 @@ export function TimeDay() {
         {!planMode && phone.length > 0 && (
           <div className="card phone-banner">
             <IconPhone size={18} />
-            <span className="grow">{phone.length === 1 ? '1 stretch' : `${phone.length} stretches`} of phone use to review</span>
+            <span className="grow">{phone.length === 1 ? '1 stretch' : `${phone.length} stretches`} of phone use · hold one to approve it</span>
             <button type="button" className="card-link quiet" onClick={() => { const before = actions.dismissPhone(phone.map((s) => s.key)); showToast(`Dismissed all ${phone.length}`, before); }}>Dismiss all</button>
             <button type="button" className="btn green" onClick={() => setReview({ focus: null })}>Review</button>
           </div>
@@ -768,10 +784,11 @@ export function TimeDay() {
                 const a = (s.start - dayStart) / 60_000, z = (s.end - dayStart) / 60_000;
                 const h = Math.max(10, top(z) - top(a) - 2);
                 return (
-                  <div key={s.key} className={`tblock phone ${h < 24 ? 'tiny' : ''}`} data-phone={s.key} style={{ top: top(a) + 1, height: h, ['--c' as string]: cat(s.categoryId)?.color ?? '#ccc' }}
-                    role="button" tabIndex={0} aria-label={`Phone use, ${fmtHM(a)} to ${fmtHM(z)}: ${s.apps.map((x) => x.label).join(', ')}. Review.`}
+                  <div key={s.key} className={`tblock phone ${h < 24 ? 'tiny' : ''} ${holding === s.key ? 'holding' : ''}`} data-phone={s.key} style={{ top: top(a) + 1, height: h, ['--c' as string]: cat(s.categoryId)?.color ?? '#ccc' }}
+                    role="button" tabIndex={0} aria-label={`Phone use, ${fmtHM(a)} to ${fmtHM(z)}: ${s.apps.map((x) => x.label).join(', ')}. Hold to approve, or press Enter to review.`}
                     onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setReview({ focus: s.key }); } }}>
-                    <span className="lbl"><strong><IconPhone size={12} />{s.apps[0]?.label}{s.apps.length > 1 ? ` +${s.apps.length - 1}` : ''}</strong></span>
+                    <span className="water" aria-hidden="true"><svg className="wave" viewBox="0 0 120 8" preserveAspectRatio="none"><path d="M0 4Q15 0 30 4T60 4T90 4T120 4V8H0Z" /></svg></span>
+                    <span className="lbl"><strong><IconPhone size={12} />{phoneBlockName(data.settings.phone, s) || s.apps[0]?.label}{s.apps.length > 1 ? ` +${s.apps.length - 1}` : ''}</strong></span>
                   </div>
                 );
               })}

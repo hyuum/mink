@@ -301,11 +301,16 @@ test('phone sessions become suggestions: ignored apps drop, short gaps join, log
     { pkg: 'com.google.android.youtube', label: 'YouTube', start: at(9, 21), end: at(9, 40) }, // 1 min gap: joins
     { pkg: 'com.spotify.music', label: 'Spotify', start: at(10), end: at(11) }, // doesn't count
     { pkg: 'com.instagram.android', label: 'Instagram', start: at(12), end: at(12, 3) }, // too short
-    { pkg: 'com.whatsapp', label: 'WhatsApp', start: at(14), end: at(14, 30) }, // unknown app: default (Drift)
+    { pkg: 'com.whatsapp', label: 'WhatsApp', start: at(14, 2), end: at(15, 28) }, // unknown app: default (Drift)
+    { pkg: 'com.instagram.android', label: 'Instagram', start: at(17, 4), end: at(17, 26) }, // only slivers left around logged time
   ];
-  const logged: TimeEntry[] = [{ id: 'x', label: '', categoryId: 'uni', start: at(14, 10), end: at(14, 20) }];
+  const logged: TimeEntry[] = [
+    { id: 'x', label: '', categoryId: 'uni', start: at(14, 30), end: at(15) },
+    { id: 'y', label: '', categoryId: 'uni', start: at(17, 10), end: at(17, 20) },
+  ];
   const out = phoneSuggestions(sessions, logged, s, [], at(20));
-  assert.deepEqual(out.map((x) => [(x.start - at(0)) / 60_000, (x.end - at(0)) / 60_000]), [[540, 580], [840, 850], [860, 870]]);
+  // Snapped to quarter hours, cut around logged time, slivers dropped.
+  assert.deepEqual(out.map((x) => [(x.start - at(0)) / 60_000, (x.end - at(0)) / 60_000]), [[540, 585], [840, 870], [900, 930]]);
   assert.equal(out[0].categoryId, 'drift');
   assert.deepEqual(out[0].apps.map((a) => a.label), ['Instagram', 'YouTube']);
   assert.equal(phoneSuggestions(sessions, logged, s, [out[0].key], at(20)).length, 2, 'dismissed ones stay hidden');

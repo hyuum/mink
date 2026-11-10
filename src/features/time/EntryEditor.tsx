@@ -45,17 +45,19 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
     const s = fromTimeInput(start);
     const t = fromTimeInput(end);
     if (s === null || (!running && t === null)) return setError('Enter a start and end time.');
-    if (!running && t! <= s) return setError('The end time needs to be after the start time.');
     if (!day) return setError('Pick a day.');
+    // Logged time can run past midnight: an end at or before the start is on the next day. Plans stay within their day.
+    if (!running && t! <= s && (planned || t === s)) return setError('The end time needs to be after the start time.');
+    const endMs = running ? null : msAt(day, t!) + (t! <= s ? 86_400_000 : 0);
     if (entry) {
-      actions.updateEntry(entry.id, { label: label.trim(), categoryId, subId: sub, start: msAt(day, s), end: running ? null : msAt(day, t!) });
+      actions.updateEntry(entry.id, { label: label.trim(), categoryId, subId: sub, start: msAt(day, s), end: endMs });
     } else if (plan && planned) {
       actions.updatePlanned(plan.id, { label: label.trim(), categoryId, subId: sub, day, startMin: s, endMin: t! });
     } else if (planned) {
       actions.addPlanned({ label: label.trim(), categoryId, ...(sub ? { subId: sub } : {}), day, startMin: s, endMin: t! });
     } else {
       if (plan) actions.deletePlanned(plan.id);
-      actions.addEntry({ label: label.trim(), categoryId, ...(sub ? { subId: sub } : {}), start: msAt(day, s), end: msAt(day, t!) });
+      actions.addEntry({ label: label.trim(), categoryId, ...(sub ? { subId: sub } : {}), start: msAt(day, s), end: endMs! });
     }
     showToast(planned ? 'Plan saved' : 'Block saved');
     onClose();
@@ -75,10 +77,7 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
       </div>
       <label className="field" htmlFor="entry-label">
         What
-        <input id="entry-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. COMP2521 lecture" list="entry-label-suggestions" autoComplete="off" />
-        <datalist id="entry-label-suggestions">
-          {Array.from(new Set(data.entries.map((e) => e.label))).slice(-20).map((l) => <option key={l} value={l} />)}
-        </datalist>
+        <input id="entry-label" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="e.g. COMP2521 lecture" autoComplete="off" />
       </label>
       <ChipGroup label="Category" value={categoryId} onChange={setCategoryId} options={data.timeCategories.map((c) => ({ value: c.id, label: c.name, color: c.color }))} />
       {subs.length > 0 && (
@@ -90,6 +89,9 @@ function EditorBody({ target, onClose }: { target: EditTarget; onClose: () => vo
         <label className="field" htmlFor="entry-start">From<input id="entry-start" type="time" value={start} onChange={(e) => setStart(e.target.value)} /></label>
         {!running && <label className="field" htmlFor="entry-end">To<input id="entry-end" type="time" value={end} onChange={(e) => setEnd(e.target.value)} /></label>}
       </div>
+      {!running && !planned && (() => { const s0 = fromTimeInput(start), t0 = fromTimeInput(end); return s0 !== null && t0 !== null && t0 < s0; })() && (
+        <p className="small muted">Ends the next day, at {end}.</p>
+      )}
       {!entry && (
         <label className="row small" htmlFor="entry-planned" style={{ gap: 10, minHeight: 44 }}>
           <input id="entry-planned" type="checkbox" checked={planned} onChange={(e) => setPlanned(e.target.checked)} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />

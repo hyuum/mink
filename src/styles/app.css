@@ -760,6 +760,8 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 /* The notification a suggested spend was read from. */
 .bank-src-btn { border: none; background: none; color: var(--green-strong); font-size: 12px; font-weight: 700; padding: 0; }
 .bank-src { grid-column: 2 / 4; display: flex; flex-direction: column; gap: 6px; margin-top: 6px; }
+.bank-tags { grid-column: 2 / 4; margin-top: 6px; }
+.bank-tags .tag-picker { gap: 6px; }
 .bank-src blockquote { margin: 0; padding: 8px 10px; border-left: 3px solid var(--line); background: var(--soft); border-radius: 0 10px 10px 0; display: flex; flex-direction: column; gap: 2px; font-size: 13px; overflow-wrap: anywhere; }
 .bank-src blockquote small { font-size: 11px; color: var(--muted); }
 .bank-src .card-link { align-self: flex-start; font-size: 12.5px; color: var(--pink-ink); padding: 0; }

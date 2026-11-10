@@ -232,7 +232,8 @@ export const phoneCategory = (s: PhoneSettings, pkg: string): ID | null => (pkg 
 /**
  * Turns raw app sessions into suggested blocks: apps that don't count are dropped, sessions with short gaps
  * between them join up, time you've already logged is cut out, and anything shorter than the minimum or
- * dismissed before is left out. Times snap to whole minutes.
+ * dismissed before is left out. Times snap to the quarter hour, like painted blocks, so a suggestion is
+ * always at least 15 minutes and lines up with the rest of the day.
  */
 export function phoneSuggestions(sessions: PhoneSession[], entries: TimeEntry[], s: PhoneSettings, dismissed: string[], now: number): PhoneSuggestion[] {
   const counted = sessions
@@ -252,18 +253,28 @@ export function phoneSuggestions(sessions: PhoneSession[], entries: TimeEntry[],
     .map((e) => [e.start, entryEnd(e, now)] as const)
     .filter(([a, b]) => b > a)
     .sort((a, b) => a[0] - b[0]);
-  const floorMin = (t: number) => Math.floor(t / MIN_MS) * MIN_MS;
-  const ceilMin = (t: number) => Math.ceil(t / MIN_MS) * MIN_MS;
+  const Q = 15 * MIN_MS;
+  const roundQ = (t: number) => Math.round(t / Q) * Q;
+  const covers = (a: number, b: number) => covered.some(([x, y]) => x < b && y > a);
   const gone = new Set(dismissed);
   const out: PhoneSuggestion[] = [];
 
   for (const g of groups) {
-    let pieces: [number, number][] = [[floorMin(g[0].start), ceilMin(Math.max(...g.map((y) => y.end)))]];
+    const rawEnd = Math.max(...g.map((y) => y.end));
+    if (rawEnd - g[0].start < s.minMin * MIN_MS) continue;
+    const g0 = roundQ(g[0].start);
+    const g1 = roundQ(rawEnd);
+    if (g1 <= g0) continue;
+    let pieces: [number, number][] = [[g0, g1]];
     for (const [a, b] of covered) {
       pieces = pieces.flatMap(([p, q]) => (b <= p || a >= q ? [[p, q] as [number, number]] : [[p, Math.min(a, q)], [Math.max(b, p), q]].filter(([u, v]) => v > u) as [number, number][]));
     }
-    for (const [p, q] of pieces) {
-      if (q - p < s.minMin * MIN_MS) continue;
+    for (const [p0, q0] of pieces) {
+      // Edges cut by logged time stay where that time starts or ends; the rest go to the nearest quarter hour.
+      let p = roundQ(p0), q = roundQ(q0);
+      if (p < p0 && covers(p, p0)) p += Q;
+      if (q > q0 && covers(q0, q)) q -= Q;
+      if (q - p < Math.max(15, s.minMin) * MIN_MS) continue;
       const key = `phone:${p}`;
       if (gone.has(key)) continue;
       const byApp = new Map<string, { pkg: string; label: string; min: number; cat: ID }>();

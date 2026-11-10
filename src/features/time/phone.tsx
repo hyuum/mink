@@ -183,12 +183,12 @@ export function PhoneSettingsCard() {
             <div className="grid2">
               <label className="field" htmlFor="phone-min">A block needs at least
                 <select id="phone-min" value={p.minMin} onChange={(e) => actions.updatePhoneSettings({ minMin: Number(e.target.value) })}>
-                  {[2, 3, 5, 10, 15, 20, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}
+                  {[15, 30, 45, 60].map((m) => <option key={m} value={m}>{m === 60 ? '1 hour' : `${m} minutes`}</option>)}
                 </select>
               </label>
               <label className="field" htmlFor="phone-gap">Join breaks shorter than
                 <select id="phone-gap" value={p.gapMin} onChange={(e) => actions.updatePhoneSettings({ gapMin: Number(e.target.value) })}>
-                  {[1, 2, 3, 5, 10].map((m) => <option key={m} value={m}>{m} {m === 1 ? 'minute' : 'minutes'}</option>)}
+                  {[5, 10, 15, 20, 30].map((m) => <option key={m} value={m}>{m} minutes</option>)}
                 </select>
               </label>
             </div>

@@ -47,6 +47,14 @@ const NEED_IDS = new Set(['food', 'transport', 'bills']);
 const tagOf = (name?: string) => (name ? [name.toLowerCase().replace(/[^\p{L}\p{N}_-]+/gu, '')].filter(Boolean) : []);
 
 /** Fill in anything an older save is missing, so new fields never crash old data. */
+/**
+ * Phone blocks now snap to the quarter hour, so anything under 15 minutes is moot, and the old 2-minute join
+ * left a day of scattered slivers: those settings move to the new defaults.
+ */
+function phoneSettingsOf(p: PhoneSettings): PhoneSettings {
+  return { ...p, minMin: Math.max(15, p.minMin), gapMin: p.gapMin < 5 ? 10 : p.gapMin };
+}
+
 export function migrate(raw: unknown): AppData {
   const base = defaultData();
   const d = (raw ?? {}) as Partial<AppData> & { version?: number; moneyCategories?: OldCategory[] };
@@ -128,7 +136,7 @@ export function migrate(raw: unknown): AppData {
     notes: arr(d.notes, []),
     rewards: { ...base.rewards, ...(d.rewards ?? {}), owned: Array.from(new Set(['matcha', ...(d.rewards?.owned ?? [])])) },
     // The daily time goal and stickers were removed; older saves drop them here.
-    settings: { ...base.settings, ...withoutOld(d.settings), phone: { ...base.settings.phone, ...(d.settings?.phone ?? {}) }, bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
+    settings: { ...base.settings, ...withoutOld(d.settings), phone: phoneSettingsOf({ ...base.settings.phone, ...(d.settings?.phone ?? {}) }), bank: { ...base.settings.bank, ...(d.settings?.bank ?? {}) } },
   });
 }
 

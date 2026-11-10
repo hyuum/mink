@@ -9,7 +9,7 @@ import { fmtMoney } from '../../lib/money';
 import { bankNotes, bankSeenApps, hasBankAccess, openAppInfo, openBankAccessSettings, rebindBank, setBankApps } from '../../lib/bank';
 import { phoneAvailable } from '../../lib/phone';
 import { showToast } from '../../app/ui-state';
-import { Card, Sheet } from '../../ui/kit';
+import { Card, Sheet, TagPicker } from '../../ui/kit';
 
 const KEEP_MS = 30 * 86_400_000;
 
@@ -67,7 +67,7 @@ export function BankReviewCard({ suggestions }: { suggestions: BankSuggestion[] 
   );
 }
 
-interface Row { on: boolean; note: string; kind: SpendKind }
+interface Row { on: boolean; note: string; kind: SpendKind; tags: string[] }
 
 /** Clears the whole review at once, for days when none of it was a real spend. */
 function dismissAll(suggestions: BankSuggestion[]) {
@@ -78,14 +78,23 @@ function dismissAll(suggestions: BankSuggestion[]) {
 function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; onClose: () => void }) {
   const today = todayISO();
   // Everything starts unticked: you tick the real spends.
-  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(suggestions.map((s) => [s.key, { on: false, note: s.note, kind: s.kind }])));
+  const [rows, setRows] = useState<Record<string, Row>>(() => Object.fromEntries(suggestions.map((s) => [s.key, { on: false, note: s.note, kind: s.kind, tags: s.tags }])));
+  // Your most used tags, offered when you add tags to a spend.
+  const expenses = useData().expenses;
+  const topTags = useMemo(() => {
+    const n = new Map<string, number>();
+    for (const e of expenses) for (const t of e.tags) n.set(t, (n.get(t) ?? 0) + 1);
+    return [...n.entries()].sort((a, b) => b[1] - a[1]).map(([t]) => t).slice(0, 8);
+  }, [expenses]);
+  // Which spend's tags are open for editing.
+  const [tagging, setTagging] = useState<string | null>(null);
   const set = (key: string, patch: Partial<Row>) => setRows((r) => ({ ...r, [key]: { ...r[key], ...patch } }));
   // Which spend's original notification is showing.
   const [shown, setShown] = useState<string | null>(null);
   const chosen = suggestions.filter((s) => rows[s.key]?.on);
   const sum = chosen.reduce((t, s) => t + s.amount, 0);
   const approve = () => {
-    const before = actions.approveBank(chosen.map((s) => ({ key: s.key, day: s.day, amount: s.amount, kind: rows[s.key].kind, tags: s.tags, note: rows[s.key].note || s.merchant, merchant: s.merchant })));
+    const before = actions.approveBank(chosen.map((s) => ({ key: s.key, day: s.day, amount: s.amount, kind: rows[s.key].kind, tags: rows[s.key].tags, note: rows[s.key].note || s.merchant, merchant: s.merchant })));
     showToast(`Logged ${chosen.length} · ${fmtMoney(sum)}`, before);
     onClose();
   };
@@ -100,7 +109,7 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
     <div className="stack" style={{ gap: 12 }}>
       <div>
         <h2>Spends to review</h2>
-        <p className="small muted">Tick the real spends, then approve them. Tap a name to change it; next time that shop starts with your name and need or want.</p>
+        <p className="small muted">Tick the real spends, then approve them. Tap a name to change it, and "+ tag" to tag it; next time that shop starts with your name, need or want, and tags.</p>
       </div>
       <div className="bank-list">
         {suggestions.map((s) => {
@@ -120,10 +129,16 @@ function ReviewBody({ suggestions, onClose }: { suggestions: BankSuggestion[]; o
                   <span className="seg-mini" role="group" aria-label="Need or want">
                     {(['need', 'want'] as const).map((k) => <button key={k} type="button" className={k} aria-pressed={r.kind === k} onClick={() => set(s.key, { kind: k })}>{k === 'need' ? 'Need' : 'Want'}</button>)}
                   </span>
-                  {s.tags.map((t) => <span key={t} className="chip-mini">#{t}</span>)}
+                  {r.tags.map((t) => <span key={t} className="chip-mini">#{t}</span>)}
+                  <button type="button" className="bank-src-btn" aria-expanded={tagging === s.key} onClick={() => setTagging(tagging === s.key ? null : s.key)}>{tagging === s.key ? 'Done' : r.tags.length ? 'Tags' : '+ tag'}</button>
                   {s.logged && <span className="warn-mini">Already logged?</span>}
                   <button type="button" className="bank-src-btn" aria-expanded={shown === s.key} onClick={() => setShown(shown === s.key ? null : s.key)}>{shown === s.key ? 'Hide notification' : 'Notification'}</button>
                 </div>
+                {tagging === s.key && (
+                  <div className="bank-tags">
+                    <TagPicker id={`bank-tag-${s.key}`} value={r.tags} onChange={(tags) => set(s.key, { tags })} suggestions={topTags} />
+                  </div>
+                )}
                 {shown === s.key && (
                   <div className="bank-src">
                     <blockquote>

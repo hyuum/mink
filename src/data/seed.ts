@@ -53,7 +53,7 @@ export function defaultPhoneSettings(): PhoneSettings {
   const ignore = ['com.spotify.music', 'com.google.android.apps.youtube.music', 'com.google.android.apps.maps', 'com.google.android.dialer',
     'com.android.dialer', 'com.google.android.deskclock', 'com.google.android.GoogleCamera', 'com.sec.android.app.camera', 'com.samsung.android.dialer'];
   return {
-    enabled: false, minMin: 5, gapMin: 2, defaultCategoryId: 'drift',
+    enabled: false, minMin: 15, gapMin: 10, defaultCategoryId: 'drift',
     apps: Object.fromEntries([...drift.map((p) => [p, 'drift']), ...ignore.map((p) => [p, null])]),
     nameAfterApp: false, names: {},
   };
