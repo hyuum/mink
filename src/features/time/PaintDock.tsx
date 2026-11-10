@@ -5,7 +5,8 @@ import { useData } from '../../data/store';
 import { ERASE, brush as brushStore, dockLabels, setDockLabels } from '../../app/ui-state';
 import { IconClose, IconDots, IconEraser, IconLabels } from '../../ui/icons';
 
-export function PaintDock() {
+/** `onDone` adds a Done button, for the Day view where the dock is opened on purpose. */
+export function PaintDock({ onDone }: { onDone?: () => void } = {}) {
   const data = useData();
   const brush = brushStore.use();
   const labels = dockLabels.use();
@@ -23,7 +24,7 @@ export function PaintDock() {
     <div className="dock-wrap">
       {brush && (
         <div className="dock-hint" role="status">
-          <span>{brush === ERASE ? 'Erasing · drag over blocks' : `Painting ${current?.name ?? ''} · drag on the day`}</span>
+          <span>{brush === ERASE ? 'Erasing · drag over blocks' : `Painting ${current?.name ?? ''} · drag on the day`}{onDone ? ' · scroll by the times' : ''}</span>
           <button type="button" aria-label="Stop painting" onClick={() => brushStore.set(null)}><IconClose size={14} /></button>
         </div>
       )}
@@ -56,6 +57,7 @@ export function PaintDock() {
             <button type="button" className="dock-tool" aria-label="Show names" onClick={() => setDockLabels(true)}><IconLabels size={18} /></button>
           </div>
         )}
+        {onDone && <button type="button" className="dock-done" onClick={onDone}>Done</button>}
       </div>
     </div>
   );

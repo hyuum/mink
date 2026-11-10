@@ -898,3 +898,7 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .wl-guide { stroke: var(--muted); stroke-width: 1; opacity: .5; }
 .wl-label { font-size: 10.5px; fill: var(--muted); }
 .wl-tip { font-size: 12px; fill: var(--ink); font-weight: 700; }
+/* Brush mode on the day: one finger paints, so the column stops scrolling; the hour labels still scroll. */
+.timeline.brushing .tl-col { touch-action: none; cursor: crosshair; }
+.timeline.brushing .hr .hour-label { color: var(--ink); }
+.dock-done { flex: none; min-height: 40px; padding: 0 16px; margin-left: 4px; border: none; border-radius: 20px; background: var(--done); color: var(--done-ink); font-size: 14px; font-weight: 700; }

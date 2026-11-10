@@ -6,15 +6,16 @@ import { actions, getData, useData } from '../../data/store';
 import { activityName, bedOf, dayTotals, phoneBlockName, type PhoneSuggestion, donePlanIds, entriesForDay, entryEnd, planForDay, runningEntry, joinsNeighbours, lookOf, templateFor, unloggedMin, wakeOf, weekDays } from '../../data/logic';
 import type { ID, TimeCategory } from '../../data/types';
 import { addDays, dayNum, dayStartMs, fmtClock, fmtDuration, fmtHM, hourLabel, minutesOfDay, msAt, relativeDay, todayISO, weekdayShort, weekdayLong } from '../../lib/dates';
-import { go, showToast, timeDay, useNow } from '../../app/ui-state';
+import { ERASE, brush as brushStore, go, showToast, timeDay, useNow } from '../../app/ui-state';
 import { Band, Bar, Card, Sheet } from '../../ui/kit';
-import { IconEye, IconLabels, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
+import { IconBrush, IconEye, IconLabels, IconMoon, IconPencil, IconPhone, IconRight, IconStop, IconSun } from '../../ui/icons';
 import { PhoneReview, usePhoneSuggestions } from './phone';
 import { EntryEditor, type EditTarget } from './EntryEditor';
 import { fmtMilestone } from './Milestones';
 import { Dial } from './Dial';
 import { TimeTabs } from './TimeTabs';
 import { PlanControls } from './PlanControls';
+import { PaintDock } from './PaintDock';
 import { drawPenLines } from './doodles';
 import { NoteBox } from './Journal';
 
@@ -40,7 +41,7 @@ interface Block {
   ghost: boolean;
 }
 type Gesture =
-  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean }
+  | { type: 'range'; a: number; b: number; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean; paint?: boolean; tapBlock?: Block }
   | { type: 'press' | 'move' | 'resize-top' | 'resize-bot' | 'fixed'; block: Block; lo: number; hi: number; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean; held?: boolean }
   | { type: 'swipe'; x0: number; y0: number; cy: number; t0: number; moved: boolean; live: boolean };
 /** `naming` adds the "What was it?" box, whose text becomes the block's name. */
@@ -138,6 +139,10 @@ export function TimeDay() {
   const [planMenu, setPlanMenu] = useState(false);
   const [review, setReview] = useState<{ focus: string | null } | null>(null);
   const [sel, setSel] = useState<{ kind: Kind; id: ID } | null>(null);
+  // Brush mode: the dock is open; with a brush picked, one finger on the day paints at once.
+  const [dockOpen, setDockOpen] = useState(false);
+  const brushNow = brushStore.use();
+  const painting = dockOpen && brushNow !== null;
   const [pick, setPick] = useState<Pick | null>(null);
   const [range, setRange] = useState<{ from: number; to: number } | null>(null);
   const [moving, setMoving] = useState<{ id: ID; startMin: number; endMin: number } | null>(null);
@@ -501,10 +506,52 @@ export function TimeDay() {
     return () => el.removeEventListener('touchmove', stop);
   }, [day]);
 
+  /** Paint [from, to) with the brush (or clear it with the eraser), as logged time or, while planning, as plan. */
+  const paintWith = (from: number, to: number) => {
+    if (!brushNow || to - from < 1) return;
+    const catId = brushNow === ERASE ? null : brushNow;
+    const what = catId ? cat(catId)?.name : null;
+    if (planMode) {
+      const { before } = actions.planPaint(day, from, to, catId);
+      showToast(what ? `Planned ${what} · ${fmtHM(from)} – ${fmtHM(to)}` : `Cleared ${fmtDuration(to - from)} of the plan`, before);
+    } else {
+      const before = actions.paint(msAt(day, from), msAt(day, to), catId, Date.now());
+      showToast(what ? `${what} · ${fmtHM(from)} – ${fmtHM(to)}` : `Cleared ${fmtDuration(to - from)}`, before);
+    }
+    if (catId) noteRecent(catId);
+  };
+  /** A tap with the brush on a block turns the whole block into the brush's activity (the eraser deletes it). */
+  const repaintBlock = (b: Block) => {
+    if (!brushNow) return;
+    if (brushNow === ERASE) {
+      const before = b.kind === 'entry' ? actions.deleteEntry(b.id) : actions.deletePlanned(b.id);
+      showToast('Cleared', before);
+      return;
+    }
+    const before = getData();
+    if (b.kind === 'entry') actions.updateEntry(b.id, { categoryId: brushNow, subId: undefined });
+    else actions.updatePlanned(b.id, { categoryId: brushNow, subId: undefined });
+    showToast(`Changed to ${cat(brushNow)?.name}`, before);
+    noteRecent(brushNow);
+  };
+
   const onPointerDown = (e: RPointerEvent<HTMLDivElement>) => {
     if (e.button > 0 || gesture.current || hold.current) return;
     if (performance.now() - lastScroll.current < GLIDE_MS) { e.preventDefault(); return; }
     const t = e.target as HTMLElement;
+    if (painting) {
+      // With the brush out there's no hold and no picker: a drag paints, a tap fills or repaints.
+      const gapEl = t.closest<HTMLElement>('[data-gap]');
+      if (gapEl) { const [a, b] = gapEl.dataset.gap!.split('-').map(Number); paintWith(a, b); return; }
+      const bEl = t.closest<HTMLElement>('[data-block]');
+      const blk = bEl ? all.find((x) => x.id === bEl.dataset.block) : undefined;
+      e.preventDefault();
+      e.currentTarget.setPointerCapture(e.pointerId);
+      const a = slotAt(e.clientY);
+      gesture.current = { type: 'range', a, b: a, x0: e.clientX, y0: e.clientY, cy: e.clientY, t0: performance.now(), moved: false, live: true, paint: true, tapBlock: blk && !blk.ghost && !blk.fixed ? blk : undefined };
+      autoScroll();
+      return;
+    }
     const ph = t.closest<HTMLElement>('[data-phone]');
     const phS = ph ? phone.find((x) => x.key === ph.dataset.phone) : undefined;
     if (ph && phS) {
@@ -551,6 +598,14 @@ export function TimeDay() {
     disarm();
     if (!g) return;
     if (g.type === 'swipe') { endSwipe(e.clientX); return; }
+    if (g.type === 'range' && g.paint) {
+      setRange(null);
+      if (g.moved) { const r = rangeOf(g.a, g.b); paintWith(r.from, r.to); return; }
+      if (g.tapBlock) { repaintBlock(g.tapBlock); return; }
+      const r = blockAt(minAt(e.clientY));
+      if (r) paintWith(r[0], r[1]);
+      return;
+    }
     if (g.type === 'range') {
       if (g.live && !g.moved) { openPick(g.a, g.a + SLOT); return; }
       if (!g.moved) {
@@ -799,7 +854,7 @@ export function TimeDay() {
             </span>
             {day !== today && <button className="card-link" onClick={() => setDay(today)}>Back to today</button>}
           </div>
-          <div key={day} className={`timeline ${planMode ? 'planning' : ''} ${slideDir === 1 ? 'slide-next' : slideDir === -1 ? 'slide-prev' : ''} ${swipeDx ? 'dragging' : ''}`} ref={grid}
+          <div key={day} className={`timeline ${planMode ? 'planning' : ''} ${painting ? 'brushing' : ''} ${slideDir === 1 ? 'slide-next' : slideDir === -1 ? 'slide-prev' : ''} ${swipeDx ? 'dragging' : ''}`} ref={grid}
             style={{ height: TOP_PAD + (h1 - h0) * HOUR_PX + 8, ...(swipeDx?.unit === 1 ? { transform: `translateX(${Math.max(-90, Math.min(90, swipeDx.dx * 0.45))}px)` } : {}) }}>
             {hours.map((hr) => (
               <div key={hr} className={`hr ${hr % 2 ? 'odd' : ''}`} style={{ top: top(hr * 60) }}>
@@ -917,7 +972,8 @@ export function TimeDay() {
         )}
       </div>
       {/* The plan lives behind one button in the bottom corner: tap it for the full plan or to edit it. */}
-      {!selBlock && (
+      {dockOpen && <PaintDock onDone={() => { setDockOpen(false); brushStore.set(null); }} />}
+      {!selBlock && !dockOpen && (
         <div className="plan-corner">
           {planMode ? (
             <button type="button" className="plan-toggle on" onClick={() => setPlanMode(false)}>Done</button>
@@ -936,6 +992,9 @@ export function TimeDay() {
                   </button>
                 </div>
               )}
+              <button type="button" className="plan-toggle" onClick={() => { setPlanMenu(false); setSel(null); setDockOpen(true); }}>
+                <IconBrush size={16} />Paint
+              </button>
               <button type="button" className="plan-toggle" aria-haspopup="menu" aria-expanded={planMenu} onClick={() => setPlanMenu(!planMenu)}>
                 <IconLabels size={16} />Plan{peek && <span className="plan-dot" aria-label="showing the full plan" />}
               </button>

@@ -33,6 +33,7 @@ export const IconPencil = (p: P) => <S {...p}><path d="M4 20l1-4.5L15.5 5a2.1 2.
 export const IconPhone = (p: P) => <S {...p}><rect x="7" y="2.5" width="10" height="19" rx="2.5" /><path d="M11 18.5h2" /></S>;
 export const IconMoon = (p: P) => <S {...p}><path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z" /></S>;
 export const IconStar = (p: P) => <S {...p}><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.4 6.7 19.4l1.2-6L3.4 9.3l6-.7z" /></S>;
+export const IconBrush = (p: P) => <S {...p}><path d="M18.4 3.6a2 2 0 0 1 2.8 2.8L12 15.6 8.4 12z" /><path d="M8.4 12c-2.2 0-3.6 1.6-3.6 3.6 0 1.6-.8 2.6-2 3.2 1 .9 2.6 1.4 4 1.4 3 0 5.2-2.2 5.2-4.6z" /></S>;
 export const IconEraser = (p: P) => <S {...p}><path d="M16 3l5 5-10 10H6l-3-3z" /><path d="M11 18h9" /></S>;
 export const IconLabels = (p: P) => <S {...p}><circle cx="5" cy="7" r="2" /><circle cx="5" cy="17" r="2" /><path d="M10 7h10M10 17h10" /></S>;
 export const IconDots = (p: P) => <S {...p}><circle cx="5" cy="12" r="2" /><circle cx="12" cy="12" r="2" /><circle cx="19" cy="12" r="2" /></S>;
