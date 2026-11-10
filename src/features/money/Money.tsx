@@ -4,14 +4,14 @@ import { useState } from 'react';
 import { actions, useData } from '../../data/store';
 import { monthSpend, upcomingBills, weekSpend, type SpendSplit } from '../../data/logic';
 import type { Expense, SpendKind } from '../../data/types';
-import { addDays, addMonths, dayNum, fmtDayShort, monthName, monthOf, monthShort, relativeDay, todayISO, weekStart, weekdayShort } from '../../lib/dates';
+import { addDays, addMonths, dayNum, daysInMonth, fmtDayShort, monthName, monthOf, monthShort, relativeDay, todayISO, weekStart, weekdayShort } from '../../lib/dates';
 import { fmtMoney, fmtMoneyShort } from '../../lib/money';
 import { openQuickAdd, showToast, useNow } from '../../app/ui-state';
 import { Band, Bar, Card } from '../../ui/kit';
 import { IconLeft, IconRight } from '../../ui/icons';
 import { AllowanceEditor, BillEditor, ExpenseEditor } from './MoneyEditors';
 import { BankReviewCard, useBankSuggestions } from './bank';
-import { MoneyTrends } from './Trends';
+import { MoneyStats, type StatsPeriod } from './Stats';
 
 type Filter = { kind: SpendKind } | { tag: string } | { untagged: true } | null;
 
@@ -42,7 +42,10 @@ export function Money() {
   const bank = useBankSuggestions();
   const now = useNow(60_000);
   const today = todayISO(now);
-  const [mode, setMode] = useState<'week' | 'month' | 'trends'>('week');
+  const [mode, setMode] = useState<'week' | 'month' | 'stats'>('week');
+  // Stats has its own period (opening on this month) and can step back through weeks or months.
+  const [period, setPeriod] = useState<StatsPeriod>('month');
+  const [statsAt, setStatsAt] = useState(today);
   const [anchor, setAnchor] = useState(today);
   const [filter, setFilter] = useState<Filter>(null);
   const [editExpense, setEditExpense] = useState<string | null>(null);
@@ -62,6 +65,14 @@ export function Money() {
   const rangeLabel = mode === 'week' ? `${dayNum(ws)} ${monthShort(monthOf(ws))} – ${dayNum(we)} ${monthShort(monthOf(we))}` : `${monthName(ym)} ${ym.slice(0, 4)}`;
   const step = (n: number) => { setAnchor(mode === 'week' ? addDays(anchor, 7 * n) : `${addMonths(ym, n)}-01`); setFilter(null); };
   const bills = upcomingBills(data.bills, today, 21);
+  const firstDay = data.expenses.reduce((m, e) => (e.day < m ? e.day : m), today);
+  const sFrom = period === 'week' ? weekStart(statsAt) : period === 'month' ? `${monthOf(statsAt)}-01` : firstDay;
+  const sTo = period === 'week' ? addDays(sFrom, 6) : period === 'month' ? `${monthOf(statsAt)}-${String(daysInMonth(monthOf(statsAt))).padStart(2, '0')}` : today;
+  const allMonths = Math.max(1, (Number(today.slice(0, 4)) - Number(firstDay.slice(0, 4))) * 12 + Number(today.slice(5, 7)) - Number(firstDay.slice(5, 7)) + 1);
+  const sLabel = period === 'all' ? `All time · ${allMonths} ${allMonths === 1 ? 'month' : 'months'}`
+    : period === 'week' ? (sFrom === weekStart(today) ? 'This week' : `${dayNum(sFrom)} ${monthShort(monthOf(sFrom))} – ${dayNum(sTo)} ${monthShort(monthOf(sTo))}`)
+    : (monthOf(statsAt) === monthOf(today) ? `This month · ${monthName(monthOf(statsAt))}` : `${monthName(monthOf(statsAt))} ${statsAt.slice(0, 4)}`);
+  const statsStep = (n: number) => setStatsAt(period === 'week' ? addDays(statsAt, 7 * n) : `${addMonths(monthOf(statsAt), n)}-01`);
 
   const inRange = (e: Expense) => (mode === 'week' ? e.day >= ws && e.day <= we : monthOf(e.day) === ym);
   const matches = (e: Expense) =>
@@ -87,10 +98,23 @@ export function Money() {
           <div className="seg" role="tablist" aria-label="View">
             <button role="tab" aria-selected={mode === 'week'} onClick={() => { setMode('week'); setFilter(null); }}>Week</button>
             <button role="tab" aria-selected={mode === 'month'} onClick={() => { setMode('month'); setFilter(null); }}>Month</button>
-            <button role="tab" aria-selected={mode === 'trends'} onClick={() => { setMode('trends'); setFilter(null); }}>Trends</button>
+            <button role="tab" aria-selected={mode === 'stats'} onClick={() => { setMode('stats'); setFilter(null); }}>Stats</button>
           </div>
         </div>
-        {mode === 'trends' ? <p className="band-sub">The last 12 weeks and 6 months.</p> : <>
+        {mode === 'stats' ? (
+          <div className="stack" style={{ gap: 8 }}>
+            <div className="seg" role="tablist" aria-label="Stats period" style={{ alignSelf: 'center' }}>
+              {(['week', 'month', 'all'] as const).map((p) => (
+                <button key={p} role="tab" aria-selected={period === p} onClick={() => { setPeriod(p); setStatsAt(today); }}>{p === 'all' ? 'All time' : p === 'week' ? 'Week' : 'Month'}</button>
+              ))}
+            </div>
+            <div className="band-row">
+              {period !== 'all' ? <button className="icon-btn" aria-label={`Previous ${period}`} onClick={() => statsStep(-1)}><IconLeft size={18} /></button> : <span style={{ width: 44 }} />}
+              <p className="band-sub grow" style={{ textAlign: 'center' }}>{sLabel}</p>
+              {period !== 'all' ? <button className="icon-btn" aria-label={`Next ${period}`} onClick={() => statsStep(1)}><IconRight size={18} /></button> : <span style={{ width: 44 }} />}
+            </div>
+          </div>
+        ) : <>
         <div className="band-row">
           <button className="icon-btn" aria-label={`Previous ${mode}`} onClick={() => step(-1)}><IconLeft size={18} /></button>
           <div style={{ textAlign: 'center' }} className="grow">
@@ -115,7 +139,7 @@ export function Money() {
         </>}
       </Band>
 
-      {mode === 'trends' ? <MoneyTrends onOpen={setEditExpense} /> : <div className="content two">
+      {mode === 'stats' ? <MoneyStats period={period} from={sFrom} to={sTo} onOpen={setEditExpense} /> : <div className="content two">
         <BankReviewCard suggestions={bank} />
         <Card title="Need vs want">
           {sum.total === 0 ? (

@@ -54,6 +54,8 @@ const GLIDE_MS = 200;
 const DOUBLE_TAP_MS = 350;
 /** A gap this short (in minutes) is filled whole by a double-tap; a longer one gets an hour. */
 const SMALL_GAP = 75;
+/** How close (in minutes) a dragged edge has to come to a neighbour's edge to snap onto it. */
+const SNAP_MIN = 10;
 /**
  * A finger has to rest this long before dragging paints time or picks up a block, so a plain swipe scrolls
  * the day. Resting on a block selects it; only a selected block moves or resizes.
@@ -266,6 +268,29 @@ export function TimeDay() {
     return { lo, hi };
   };
 
+  /**
+   * Snap to neighbours: an edge dragged within SNAP_MIN of another block's start or end (or of waking up
+   * or bedtime) lands exactly on it, so blocks meet without slivers between them.
+   */
+  const edgesBut = (id?: ID) => {
+    const list = (planMode ? plansV : loggedV).filter((o) => o.id !== id);
+    const out = list.flatMap((o) => [o.startMin, o.endMin]);
+    if (!planMode && wakeMin !== undefined) out.push(wakeMin);
+    if (!planMode && bedMin !== undefined) out.push(bedMin);
+    return out;
+  };
+  const snapTo = (m: number, edges: number[]) => {
+    let best = m, bestD = SNAP_MIN + 0.001;
+    for (const x of edges) { const d = Math.abs(x - m); if (d < bestD) { best = x; bestD = d; } }
+    return best;
+  };
+  const rangeOf = (a: number, b: number) => {
+    const edges = edgesBut();
+    const from = snapTo(Math.min(a, b), edges);
+    const to = snapTo(Math.max(a, b) + SLOT, edges);
+    return to - from >= 5 ? { from, to } : { from: Math.min(a, b), to: Math.max(a, b) + SLOT };
+  };
+
   const openPick = (from: number, to: number) => {
     const kind: Kind = planMode ? 'plan' : 'entry';
     const overlaps = (kind === 'plan' ? plans : logged).some((b) => b.startMin < to && b.endMin > from);
@@ -321,7 +346,7 @@ export function TimeDay() {
     if (g.type === 'range') {
       if (!g.moved) return;
       g.b = slotAt(clientY);
-      setRange({ from: Math.min(g.a, g.b), to: Math.max(g.a, g.b) + SLOT });
+      setRange(rangeOf(g.a, g.b));
       return;
     }
     if (!g.moved || g.type === 'fixed') return;
@@ -329,9 +354,18 @@ export function TimeDay() {
     const dm = Math.round(((dy / HOUR_PX) * 60) / SLOT) * SLOT;
     const { startMin: s0, endMin: e0 } = g.block;
     let a = s0, b = e0;
-    if (g.type === 'move') { a = Math.max(g.lo, Math.min(g.hi - (e0 - s0), s0 + dm)); b = a + (e0 - s0); }
-    else if (g.type === 'resize-top') a = Math.max(g.lo, Math.min(e0 - SLOT, s0 + dm));
-    else b = Math.min(g.hi, Math.max(s0 + SLOT, e0 + dm));
+    const others = edgesBut(g.block.id);
+    if (g.type === 'move') {
+      // Whichever end lands near a neighbour's edge snaps to it.
+      const len = e0 - s0;
+      let start = s0 + dm;
+      const sa = snapTo(start, others), sb = snapTo(start + len, others);
+      if (sa !== start && (sb === start + len || Math.abs(sa - start) <= Math.abs(sb - start - len))) start = sa;
+      else if (sb !== start + len) start = sb - len;
+      a = Math.max(g.lo, Math.min(g.hi - len, start)); b = a + len;
+    }
+    else if (g.type === 'resize-top') a = Math.max(g.lo, Math.min(e0 - SLOT, snapTo(s0 + dm, others)));
+    else b = Math.min(g.hi, Math.max(s0 + SLOT, snapTo(e0 + dm, others)));
     setMoving({ id: g.block.id, startMin: a, endMin: b });
   };
 
@@ -536,7 +570,8 @@ export function TimeDay() {
         else tapHint.current = setTimeout(() => showToast('Double-tap to add a block, or drag down the day'), DOUBLE_TAP_MS);
         return;
       }
-      openPick(Math.min(g.a, g.b), Math.max(g.a, g.b) + SLOT);
+      const r = rangeOf(g.a, g.b);
+      openPick(r.from, r.to);
       return;
     }
     const tap = performance.now() - g.t0 < TAP_MS;

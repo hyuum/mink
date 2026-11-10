@@ -873,11 +873,28 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
   background-size: 4px 4px; background-repeat: no-repeat;
   background-position: left 4px top 4px, right 4px top 4px, left 4px bottom 4px, right 4px bottom 4px;
 }
-/* Money › Trends */
-.trend-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px 16px; }
-.trend-tiles > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.trend-tiles .num { font-size: 22px; line-height: 1.15; }
-.trend-tiles small { font-size: 12px; }
-.trend-up { color: var(--pink-ink); }
-.trend-down { color: var(--green-strong); }
 .bars .bar-val { white-space: nowrap; overflow: visible; font-size: 11px; min-height: 15px; }
+/* Money › Stats. Categorical slots checked for colour-blind separation on the card surface, light and dark. */
+:root { --cat-1: #4F7FC4; --cat-2: #D69A1E; --cat-3: #D9708F; --cat-4: #5E8F4E; --cat-other: #B9B4A8; }
+:root[data-theme="dark"] { --cat-1: #5A86CC; --cat-2: #BF8A1A; --cat-3: #D16F8F; --cat-4: #4F8F3E; --cat-other: #6E6B63; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --cat-1: #5A86CC; --cat-2: #BF8A1A; --cat-3: #D16F8F; --cat-4: #4F8F3E; --cat-other: #6E6B63; } }
+.stats-hero { display: grid; gap: 14px; }
+.donut { width: min(240px, 70%); justify-self: center; display: block; }
+.donut-total { font-family: var(--font-display); font-size: 22px; fill: var(--ink); }
+.donut-cap { font-size: 11.5px; fill: var(--muted); }
+.stats-legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.stats-legend li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.stats-legend .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+.stats-legend b { font-weight: 400; font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
+.stats-split { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
+.stats-split i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.hbar { height: 6px; border-radius: 3px; background: var(--track); margin-top: 4px; overflow: hidden; }
+.hbar span { display: block; height: 100%; border-radius: 3px; background: var(--check); }
+.weekline { width: 100%; height: auto; display: block; touch-action: pan-y; }
+.wl-line { fill: none; stroke: var(--done); stroke-width: 2; stroke-linejoin: round; }
+.wl-dot { fill: var(--done); stroke: var(--card); stroke-width: 2; }
+.wl-limit { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 4 4; opacity: .7; }
+.wl-axis { stroke: var(--line); stroke-width: 1; }
+.wl-guide { stroke: var(--muted); stroke-width: 1; opacity: .5; }
+.wl-label { font-size: 10.5px; fill: var(--muted); }
+.wl-tip { font-size: 12px; fill: var(--ink); font-weight: 700; }
