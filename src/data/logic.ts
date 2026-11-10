@@ -1,6 +1,6 @@
 // Pure functions over AppData: summaries, bills, task grouping. No React, no storage — easy to test.
 import type { AppData, Bill, BlockLook, Cadence, Day, DayTemplate, Expense, ID, LineKind, Milestone, PhoneSettings, PlannedBlock, Priority, RepeatUnit, Rewards, SpendKind, Task, TextLine, TimeCategory, TimeEntry, TrackerItem } from './types';
-import { MIN_MS, addDays, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
+import { MIN_MS, addDays, addMonths, daysInMonth, dayStartMs, fromISO, monthOf, toISO, weekStart } from '../lib/dates';
 
 /* ---------- Time ---------- */
 
@@ -667,6 +667,88 @@ export function monthSpend(expenses: Expense[], ym: string, weeklyAllowance: num
     weeks.push({ start: w, ...s });
   }
   return { ...sum, weeks, allowance: weeklyAllowance * 4 };
+}
+
+export interface SpendTrends {
+  /** The last `weeks` Monday–Sunday weeks, oldest first, this week last. */
+  weeks: (SpendSplit & { start: Day })[];
+  /** The last six calendar months, oldest first, this month last. */
+  months: (SpendSplit & { ym: string })[];
+  /** Finished weeks since you started logging (up to `weeks` - 1): the averages use only these. */
+  fullWeeks: number;
+  avgWeek: number;
+  avgNeed: number;
+  avgWant: number;
+  /** Finished weeks that stayed within the allowance. */
+  underWeeks: number;
+  /** Average spent on each weekday (Monday first) over the finished weeks. */
+  byWeekday: number[];
+  /** Where the money went, by spend name, over all the weeks shown. */
+  places: { name: string; total: number; count: number }[];
+  /** Each tag over the last four weeks against the four before. */
+  tags: { tag: string; now: number; before: number }[];
+  /** The biggest single spends over all the weeks shown. */
+  biggest: Expense[];
+}
+
+/** Longer-term spending: weekly and monthly totals, averages, habits by weekday, top places and tags. */
+export function spendTrends(expenses: Expense[], today: Day, weeklyAllowance: number, weeks = 12): SpendTrends {
+  const thisWeek = weekStart(today);
+  const first = addDays(thisWeek, -7 * (weeks - 1));
+  const shown = expenses.filter((e) => e.day >= first && e.day <= addDays(thisWeek, 6));
+  const ws = Array.from({ length: weeks }, (_, i) => {
+    const start = addDays(first, 7 * i);
+    const end = addDays(start, 6);
+    const sp = emptySplit();
+    for (const e of shown) if (e.day >= start && e.day <= end) addTo(sp, e.kind, e.amount);
+    return { start, ...sp };
+  });
+  const ym = monthOf(today);
+  const months = Array.from({ length: 6 }, (_, i) => {
+    const m = addMonths(ym, i - 5);
+    const sp = emptySplit();
+    for (const e of expenses) if (monthOf(e.day) === m) addTo(sp, e.kind, e.amount);
+    return { ym: m, ...sp };
+  });
+  // Averages count finished weeks only, from the week of your first spend.
+  const firstDay = expenses.reduce<Day | null>((m, e) => (m === null || e.day < m ? e.day : m), null);
+  const done = ws.filter((w) => w.start < thisWeek && firstDay !== null && addDays(w.start, 6) >= firstDay);
+  const n = done.length;
+  const avg = (f: (w: SpendSplit) => number) => (n ? Math.round(done.reduce((t, w) => t + f(w), 0) / n) : 0);
+  const byWeekday = Array.from({ length: 7 }, (_, d) => {
+    if (!n) return 0;
+    let t = 0;
+    for (const w of done) { const day = addDays(w.start, d); for (const e of shown) if (e.day === day) t += e.amount; }
+    return Math.round(t / n);
+  });
+  const place = new Map<string, { name: string; total: number; count: number }>();
+  for (const e of shown) {
+    const name = spendName(e.note) || (e.tags[0] ? `#${e.tags[0]}` : 'unnamed');
+    const p = place.get(name) ?? { name, total: 0, count: 0 };
+    p.total += e.amount; p.count += 1;
+    place.set(name, p);
+  }
+  const cut = addDays(thisWeek, -21);
+  const prev = addDays(cut, -28);
+  const tagMap = new Map<string, { tag: string; now: number; before: number }>();
+  for (const e of expenses) {
+    const slot = e.day >= cut && e.day <= addDays(thisWeek, 6) ? 'now' : e.day >= prev && e.day < cut ? 'before' : null;
+    if (!slot) continue;
+    for (const t of e.tags) { const r = tagMap.get(t) ?? { tag: t, now: 0, before: 0 }; r[slot] += e.amount; tagMap.set(t, r); }
+  }
+  return {
+    weeks: ws,
+    months,
+    fullWeeks: n,
+    avgWeek: avg((w) => w.total),
+    avgNeed: avg((w) => w.need),
+    avgWant: avg((w) => w.want),
+    underWeeks: done.filter((w) => w.total <= weeklyAllowance).length,
+    byWeekday,
+    places: [...place.values()].sort((a, b) => b.total - a.total).slice(0, 8),
+    tags: [...tagMap.values()].sort((a, b) => b.now + b.before - (a.now + a.before)).slice(0, 8),
+    biggest: [...shown].sort((a, b) => b.amount - a.amount).slice(0, 5),
+  };
 }
 
 /** Tags used on spending, most used first. */

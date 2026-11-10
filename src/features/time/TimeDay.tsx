@@ -276,7 +276,8 @@ export function TimeDay() {
       clear: overlaps,
       naming: true,
       apply: (categoryId, label = '', subId) => {
-        const what = label || activityName(cat(categoryId ?? ''), subId);
+        // Read fresh: the activity may have been made a moment ago in the picker.
+        const what = label || activityName(getData().timeCategories.find((c) => c.id === categoryId), subId);
         if (kind === 'plan') {
           const { before, id } = actions.planPaint(day, from, to, categoryId, label, subId);
           setSel(id ? { kind: 'plan', id } : null);
@@ -937,6 +938,17 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
   const [parent, setParent] = useState<TimeCategory | null>(null);
   const choose = (categoryId: ID | null, label = typed, subId?: ID) => { pick.apply(categoryId, label, subId); onClose(); };
   const tap = (c: TimeCategory) => { if (c.subs?.length) setParent(c); else choose(c.id); };
+  // A new activity, made right here; what you typed above starts as its name.
+  const [making, setMaking] = useState<string | null>(null);
+  const make = (e: FormEvent) => {
+    e.preventDefault();
+    const n = (making ?? '').trim();
+    if (!n) return;
+    const existing = cats.find((c) => c.name.toLowerCase() === n.toLowerCase());
+    const id = existing?.id ?? actions.addTimeCategory(n);
+    // No need to also name the block what the activity is called.
+    choose(id, typed.toLowerCase() === n.toLowerCase() ? '' : typed);
+  };
   const submit = (e: FormEvent) => { e.preventDefault(); const g = cats.find((c) => c.id === guess); if (g) tap(g); };
   return (
     <div className="stack" style={{ gap: 14 }}>
@@ -969,6 +981,14 @@ function PickerBody({ pick, cats, names, onClose }: { pick: Pick; cats: TimeCate
               <span className="swatch" style={{ background: c.color }} />{c.name}{c.subs?.length ? <span className="muted" aria-hidden="true"> ›</span> : null}
             </button>
           ))}
+          {making === null
+            ? <button type="button" className="act-chip new" onClick={() => setMaking(text.trim())}>+ New activity</button>
+            : (
+              <form className="act-new" onSubmit={make}>
+                <input className="field-input" autoFocus value={making} onChange={(e) => setMaking(e.target.value)} placeholder="Activity name" aria-label="New activity name" enterKeyHint="done" />
+                <button type="submit" className="btn green" disabled={!making.trim()}>Add</button>
+              </form>
+            )}
           {pick.clear && <button type="button" className="act-chip clear" onClick={() => choose(null, '')}>Clear this time</button>}
         </div>
       )}

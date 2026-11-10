@@ -409,6 +409,9 @@ a.btn { text-decoration: none; }
 .act-chip .swatch { width: 16px; height: 16px; border-radius: 50%; }
 .act-chip.recent { border-color: var(--band); }
 .act-chip.clear { color: var(--pink-ink); border-style: dashed; }
+.act-chip.new { border-style: dashed; color: var(--muted); }
+.act-new { grid-column: 1 / -1; display: flex; gap: 8px; }
+.act-new .btn { flex: none; }
 .plan-controls { display: grid; gap: 10px; margin-top: 4px; }
 .pc-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .pc-label { width: 100%; font-size: 12px; color: var(--band-muted); }
@@ -870,3 +873,11 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
   background-size: 4px 4px; background-repeat: no-repeat;
   background-position: left 4px top 4px, right 4px top 4px, left 4px bottom 4px, right 4px bottom 4px;
 }
+/* Money › Trends */
+.trend-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px 16px; }
+.trend-tiles > div { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.trend-tiles .num { font-size: 22px; line-height: 1.15; }
+.trend-tiles small { font-size: 12px; }
+.trend-up { color: var(--pink-ink); }
+.trend-down { color: var(--green-strong); }
+.bars .bar-val { white-space: nowrap; overflow: visible; font-size: 11px; min-height: 15px; }

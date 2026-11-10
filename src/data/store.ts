@@ -663,12 +663,15 @@ export const actions = {
   renameTimeCategory(id: ID, name: string) {
     update((d) => ({ ...d, timeCategories: replace(d.timeCategories, id, { name }) }));
   },
-  addTimeCategory(name: string) {
+  /** Returns the new activity's id. */
+  addTimeCategory(name: string): ID {
+    const id = uid();
     update((d) => {
       const unused = CATEGORY_COLORS.find((c) => !d.timeCategories.some((x) => x.color.toUpperCase() === c.toUpperCase()));
       const color = unused ?? CATEGORY_COLORS[d.timeCategories.length % CATEGORY_COLORS.length];
-      return { ...d, timeCategories: [...d.timeCategories, { id: uid(), name, color }] };
+      return { ...d, timeCategories: [...d.timeCategories, { id, name, color }] };
     });
+    return id;
   },
   updateTimeCategory(id: ID, patch: Partial<Omit<TimeCategory, 'id'>>) {
     update((d) => ({ ...d, timeCategories: replace<TimeCategory>(d.timeCategories, id, patch) }));

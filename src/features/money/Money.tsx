@@ -11,6 +11,7 @@ import { Band, Bar, Card } from '../../ui/kit';
 import { IconLeft, IconRight } from '../../ui/icons';
 import { AllowanceEditor, BillEditor, ExpenseEditor } from './MoneyEditors';
 import { BankReviewCard, useBankSuggestions } from './bank';
+import { MoneyTrends } from './Trends';
 
 type Filter = { kind: SpendKind } | { tag: string } | { untagged: true } | null;
 
@@ -41,7 +42,7 @@ export function Money() {
   const bank = useBankSuggestions();
   const now = useNow(60_000);
   const today = todayISO(now);
-  const [mode, setMode] = useState<'week' | 'month'>('week');
+  const [mode, setMode] = useState<'week' | 'month' | 'trends'>('week');
   const [anchor, setAnchor] = useState(today);
   const [filter, setFilter] = useState<Filter>(null);
   const [editExpense, setEditExpense] = useState<string | null>(null);
@@ -86,8 +87,10 @@ export function Money() {
           <div className="seg" role="tablist" aria-label="View">
             <button role="tab" aria-selected={mode === 'week'} onClick={() => { setMode('week'); setFilter(null); }}>Week</button>
             <button role="tab" aria-selected={mode === 'month'} onClick={() => { setMode('month'); setFilter(null); }}>Month</button>
+            <button role="tab" aria-selected={mode === 'trends'} onClick={() => { setMode('trends'); setFilter(null); }}>Trends</button>
           </div>
         </div>
+        {mode === 'trends' ? <p className="band-sub">The last 12 weeks and 6 months.</p> : <>
         <div className="band-row">
           <button className="icon-btn" aria-label={`Previous ${mode}`} onClick={() => step(-1)}><IconLeft size={18} /></button>
           <div style={{ textAlign: 'center' }} className="grow">
@@ -109,9 +112,10 @@ export function Money() {
             {mode === 'week' && isCurrent && week.daysLeft > 0 && left > 0 && <span>{fmtMoney(week.perDayLeft)} a day for {week.daysLeft} {week.daysLeft === 1 ? 'day' : 'days'}</span>}
           </div>
         </div>
+        </>}
       </Band>
 
-      <div className="content two">
+      {mode === 'trends' ? <MoneyTrends onOpen={setEditExpense} /> : <div className="content two">
         <BankReviewCard suggestions={bank} />
         <Card title="Need vs want">
           {sum.total === 0 ? (
@@ -210,7 +214,7 @@ export function Money() {
             </div>
           ))}
         </Card>
-      </div>
+      </div>}
 
       <ExpenseEditor id={editExpense} onClose={() => setEditExpense(null)} />
       <BillEditor id={editBill} onClose={() => setEditBill(null)} />

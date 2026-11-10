@@ -522,3 +522,31 @@ test('phone blocks are named by your name for the app, else the app (if on), els
   assert.equal(phoneBlockName({ ...base, nameAfterApp: true }, s), 'Instagram');
   assert.equal(phoneBlockName({ ...base, nameAfterApp: true, names: { 'com.instagram.android': 'scrolling' } }, s), 'scrolling');
 });
+
+test('spending trends: weekly totals, averages over finished weeks only, weekdays, places and tags', async () => {
+  const { spendTrends } = await import('../src/data/logic.ts');
+  const today = '2026-10-14'; // a Wednesday
+  const e = (id: string, day: string, amount: number, kind: 'need' | 'want', note: string, tags: string[] = []): Expense => ({ id, day, amount, kind, note, tags, createdAt: 0 });
+  const expenses = [
+    e('a', '2026-09-28', 3000, 'need', 'woolworths', ['groceries']), // Mon, two weeks ago
+    e('b', '2026-10-03', 2000, 'want', 'mugi cafe', ['coffee']), // Sat, two weeks ago
+    e('c', '2026-10-05', 9000, 'need', 'woolworths', ['groceries']), // Mon, last week
+    e('d', '2026-10-13', 500, 'want', 'mugi cafe', ['coffee']), // this week: not in the averages
+  ];
+  const t = spendTrends(expenses, today, 10000);
+  assert.equal(t.weeks.length, 12);
+  assert.equal(t.weeks.at(-1)!.start, '2026-10-12');
+  assert.equal(t.weeks.at(-1)!.total, 500);
+  assert.equal(t.fullWeeks, 2, 'only finished weeks since the first spend count');
+  assert.equal(t.avgWeek, 7000);
+  assert.equal(t.avgWant, 1000);
+  assert.equal(t.underWeeks, 2);
+  assert.equal(t.byWeekday[0], 6000, 'Mondays average 60 dollars');
+  assert.equal(t.byWeekday[5], 1000);
+  assert.deepEqual(t.places.map((p) => [p.name, p.count, p.total]), [['woolworths', 2, 12000], ['mugi cafe', 2, 2500]]);
+  assert.equal(t.biggest[0].id, 'c');
+  const coffee = t.tags.find((g) => g.tag === 'coffee')!;
+  assert.deepEqual([coffee.now, coffee.before], [2500, 0], 'the last four weeks include all of these');
+  assert.equal(t.months.at(-1)!.ym, '2026-10');
+  assert.equal(t.months.at(-1)!.total, 11500);
+});
