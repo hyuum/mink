@@ -1,12 +1,12 @@
 // Money › Stats: one period at a time (a week, a month or all time). A donut of where the money went by tag,
 // spending over the period (days as bars for a week, weeks as a line for longer), top places and biggest spends.
 import { useState, type PointerEvent as RPointerEvent } from 'react';
-import { useData } from '../../data/store';
+import { actions, useData } from '../../data/store';
 import { spendStats, topSpendTags } from '../../data/logic';
 import type { Expense } from '../../data/types';
 import { dayNum, fmtDayShort, monthOf, monthShort, todayISO, weekdayShort } from '../../lib/dates';
 import { fmtMoney } from '../../lib/money';
-import { Card } from '../../ui/kit';
+import { Card, Sheet } from '../../ui/kit';
 
 export type StatsPeriod = 'week' | 'month' | 'all';
 
@@ -19,21 +19,45 @@ const shortDay = (d: string) => `${dayNum(d)} ${monthShort(monthOf(d))}`;
 export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; from: string; to: string; onOpen: (id: string) => void }) {
   const data = useData();
   const weekly = data.settings.weeklyAllowance;
-  const tags = topSpendTags(data.expenses);
-  const st = spendStats(data.expenses, from, to, tags, period === 'week' ? 'day' : 'week');
-  const colour = (tag: string | null) => (tag === null ? OTHER : SLOT[tags.indexOf(tag)] ?? OTHER);
+  // Hidden tags (rent, say) leave Stats altogether: any spend carrying one doesn't count here.
+  const hidden = data.settings.statsHidden ?? [];
+  const shown = hidden.length ? data.expenses.filter((e) => !e.tags.some((t) => hidden.includes(t))) : data.expenses;
+  const tags = topSpendTags(shown);
+  const st = spendStats(shown, from, to, tags, period === 'week' ? 'day' : 'week');
+  const [tagSheet, setTagSheet] = useState(false);
+  const hiddenHere = data.expenses.filter((e) => e.day >= from && e.day <= to && e.tags.some((t) => hidden.includes(t))).reduce((t, e) => t + e.amount, 0);
+  // A tag keeps its colour when others are hidden: colours follow your biggest tags overall, and a hidden
+  // tag's colour passes to whichever tag takes its place.
+  const base = topSpendTags(data.expenses);
+  const free = base.map((t, i) => (tags.includes(t) ? -1 : i)).filter((i) => i >= 0);
+  const newcomers = tags.filter((t) => !base.includes(t));
+  const colour = (tag: string | null) => {
+    if (tag === null) return OTHER;
+    const i = base.indexOf(tag);
+    if (i >= 0 && tags.includes(tag)) return SLOT[i];
+    const j = newcomers.indexOf(tag);
+    return j >= 0 && free[j] !== undefined ? SLOT[free[j]] : OTHER;
+  };
   // Weeks still to come would read as $0: the line stops at this week.
   const today = todayISO();
   const past = st.series.filter((w) => w.start <= today);
   const weeks = past.length;
 
+  const tagsSheet = <TagsSheet open={tagSheet} onClose={() => setTagSheet(false)} hidden={hidden} />;
   if (st.count === 0) {
-    return <div className="content"><Card><p className="muted" style={{ fontSize: 14 }}>Nothing spent in this {period === 'all' ? 'time' : period}.</p></Card></div>;
+    return (
+      <div className="content">
+        <Card action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Tags</button>}>
+          <p className="muted" style={{ fontSize: 14 }}>Nothing {hiddenHere ? 'else ' : ''}spent in this {period === 'all' ? 'time' : period}{hiddenHere ? ` (${fmtMoney(hiddenHere)} is in hidden tags)` : ''}.</p>
+        </Card>
+        {tagsSheet}
+      </div>
+    );
   }
   const limit = period === 'week' ? weekly : period === 'month' ? weekly * 4 : weekly * weeks;
   return (
     <div className="content two">
-      <Card className="span stats-hero">
+      <Card title="By tag" className="span stats-hero" action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Tags</button>}>
         <Donut slices={st.slices.map((x) => ({ ...x, color: colour(x.tag) }))} total={st.total}
           caption={period === 'all' ? `about ${dollars(st.total / Math.max(1, weeks))} a week` : `of ${dollars(limit)}`} />
         <ul className="stats-legend">
@@ -46,10 +70,11 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
             </li>
           ))}
         </ul>
-        <div className="stats-split" aria-label={`Needs ${fmtMoney(st.need)}, wants ${fmtMoney(st.want)}`}>
-          <span><i style={{ background: 'var(--need)' }} />Needs {fmtMoney(st.need)}</span>
-          <span><i style={{ background: 'var(--want)' }} />Wants {fmtMoney(st.want)}</span>
-        </div>
+        {hidden.length > 0 && (
+          <button type="button" className="stats-hidden" onClick={() => setTagSheet(true)}>
+            Not counting {hidden.map((t) => `#${t}`).join(', ')}{hiddenHere ? ` · ${fmtMoney(hiddenHere)} here` : ''}
+          </button>
+        )}
       </Card>
 
       <Card title={period === 'week' ? 'Each day' : 'Each week'} className="span">
@@ -72,6 +97,20 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
         </div>
       </Card>
 
+      <details className="card stats-fold span">
+        <summary><span>Needs and wants</span><span className="muted">{Math.round((st.want / st.total) * 100)}% wants</span></summary>
+        <div className="stats-nw">
+          <div className="seg-bar" role="img" aria-label={`Needs ${fmtMoney(st.need)}, wants ${fmtMoney(st.want)}`}>
+            {st.need > 0 && <span style={{ flex: st.need, background: 'var(--need)' }} />}
+            {st.want > 0 && <span style={{ flex: st.want, background: 'var(--want)' }} />}
+          </div>
+          <div className="row small" style={{ justifyContent: 'space-between' }}>
+            <span><i className="nw-dot" style={{ background: 'var(--need)' }} />Needs {fmtMoney(st.need)}</span>
+            <span><i className="nw-dot" style={{ background: 'var(--want)' }} />Wants {fmtMoney(st.want)}</span>
+          </div>
+        </div>
+      </details>
+
       <Card title="Biggest spends">
         <ul className="items">
           {st.biggest.map((e: Expense) => (
@@ -85,7 +124,36 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
           ))}
         </ul>
       </Card>
+      {tagsSheet}
     </div>
+  );
+}
+
+/** Every tag you've used, biggest first, each switched on or off for Stats. */
+function TagsSheet({ open, onClose, hidden }: { open: boolean; onClose: () => void; hidden: string[] }) {
+  const data = useData();
+  const totals = new Map<string, number>();
+  for (const e of data.expenses) for (const t of e.tags) totals.set(t, (totals.get(t) ?? 0) + e.amount);
+  const all = [...totals.entries()].sort((a, b) => b[1] - a[1]);
+  return (
+    <Sheet open={open} onClose={onClose} label="Tags in stats">
+      <h2>Tags in stats</h2>
+      <p className="small muted">Switch off a tag to leave its spends out of Stats, like rent or a one-off. Your spending list and weekly allowance still count them.</p>
+      {all.length === 0 ? <p className="small muted">No tags yet.</p> : (
+        <ul className="tag-switches">
+          {all.map(([t, v]) => (
+            <li key={t}>
+              <label htmlFor={`st-${t}`}>
+                <input id={`st-${t}`} type="checkbox" checked={!hidden.includes(t)} onChange={() => actions.toggleStatsTag(t)} />
+                <span className="grow">#{t}</span>
+                <span className="muted small">{fmtMoney(v)} all time</span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      )}
+      <button type="button" className="btn green block" onClick={onClose}>Done</button>
+    </Sheet>
   );
 }
 

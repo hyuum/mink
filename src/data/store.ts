@@ -657,6 +657,13 @@ export const actions = {
   },
 
   /* Settings & data */
+  /** Show or hide a tag in Money › Stats. */
+  toggleStatsTag(tag: string) {
+    update((d) => {
+      const h = d.settings.statsHidden ?? [];
+      return { ...d, settings: { ...d.settings, statsHidden: h.includes(tag) ? h.filter((t) => t !== tag) : [...h, tag] } };
+    });
+  },
   updateSettings(patch: Partial<Settings>) {
     update((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
   },

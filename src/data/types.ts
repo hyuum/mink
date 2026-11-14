@@ -224,6 +224,8 @@ export interface Settings {
   theme: 'system' | 'light' | 'dark';
   /** The colour theme in use (see PALETTES); bought with gems. */
   palette: string;
+  /** Tags left out of Money › Stats: spends carrying any of them don't count there. */
+  statsHidden: string[];
   phone: PhoneSettings;
   bank: BankSettings;
 }

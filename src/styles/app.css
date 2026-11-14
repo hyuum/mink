@@ -886,8 +886,6 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .stats-legend li { display: flex; align-items: center; gap: 8px; font-size: 14px; }
 .stats-legend .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
 .stats-legend b { font-weight: 400; font-variant-numeric: tabular-nums; min-width: 72px; text-align: right; }
-.stats-split { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; }
-.stats-split i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
 .hbar { height: 6px; border-radius: 3px; background: var(--track); margin-top: 4px; overflow: hidden; }
 .hbar span { display: block; height: 100%; border-radius: 3px; background: var(--check); }
 .weekline { width: 100%; height: auto; display: block; touch-action: pan-y; }
@@ -902,3 +900,17 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .timeline.brushing .tl-col { touch-action: none; cursor: crosshair; }
 .timeline.brushing .hr .hour-label { color: var(--ink); }
 .dock-done { flex: none; min-height: 40px; padding: 0 16px; margin-left: 4px; border: none; border-radius: 20px; background: var(--done); color: var(--done-ink); font-size: 14px; font-weight: 700; }
+.stats-hidden { justify-self: start; border: none; background: none; padding: 0; font: inherit; font-size: 13px; color: var(--muted); text-decoration: underline dotted; text-underline-offset: 3px; text-align: left; cursor: pointer; }
+.stats-fold { padding: 0; }
+.stats-fold summary { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 14px 16px; cursor: pointer; list-style: none; font-size: 14px; }
+.stats-fold summary::-webkit-details-marker { display: none; }
+.stats-fold summary::after { content: "›"; color: var(--muted); transition: transform .15s; margin-left: 4px; }
+.stats-fold[open] summary::after { transform: rotate(90deg); }
+.stats-fold summary > span:first-child { flex: 1; }
+.stats-nw { display: grid; gap: 8px; padding: 0 16px 16px; }
+.seg-bar { display: flex; gap: 2px; height: 10px; }
+.seg-bar span { border-radius: 3px; }
+.nw-dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 6px; vertical-align: -1px; }
+.tag-switches { list-style: none; margin: 0; padding: 0; display: grid; }
+.tag-switches label { display: flex; align-items: center; gap: 12px; min-height: 48px; border-bottom: 1px solid var(--line); font-size: 15px; cursor: pointer; }
+.tag-switches input { width: 20px; height: 20px; accent-color: var(--done); flex: none; }

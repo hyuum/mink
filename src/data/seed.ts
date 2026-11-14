@@ -79,7 +79,7 @@ export function defaultData(): AppData {
     lines: [],
     notes: [],
     rewards: { gems: 0, days: {}, owned: ['matcha'] },
-    settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', palette: 'matcha', phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
+    settings: { dayStartHour: 8, dayEndHour: 22, weeklyAllowance: 25000, theme: 'system', palette: 'matcha', statsHidden: [], phone: defaultPhoneSettings(), bank: { enabled: false, apps: [], merchants: {} } },
   };
 }
 
