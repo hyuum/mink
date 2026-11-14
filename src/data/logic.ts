@@ -911,24 +911,49 @@ export function parseBankNote(title: string, text: string): { amount: number; me
  */
 export const bankPattern = (title: string, text: string) => spendName(`${title} ${text}`).replace(/[\d.,$]+/g, '#').slice(0, 120);
 
+/** Why a notification doesn't read as a spend, in plain words, or null when it does. */
+export function bankNoteReason(title: string, text: string): string | null {
+  const all = `${title}\n${text}`;
+  const ns = NOT_SPENDING.exec(all);
+  if (ns) return `Not a spend: says "${ns[0].toLowerCase()}"`;
+  const ad = PROMO.exec(all);
+  if (ad) return `Looks like an ad: says "${ad[0].toLowerCase()}"`;
+  if (!AMOUNT_RE.test(all)) return 'No dollar amount';
+  if (!parseBankNote(title, text)) return 'No word saying money was spent (like "purchase", "paid" or "at")';
+  return null;
+}
+
+export type BankNoteStatus = 'review' | 'logged' | 'dismissed' | 'hidden' | 'repeat' | 'skipped';
+export interface BankHistoryRow {
+  note: BankNote;
+  status: BankNoteStatus;
+  /** For skipped ones: why. */
+  reason?: string;
+  amount?: number;
+  merchant?: string;
+}
+
 /**
- * Spends to review from kept bank notifications: newest first, leaving out ones already logged from a
- * notification or dismissed. Each starts with what you chose for that shop last time.
+ * What became of every kept notification, oldest first: waiting for review, logged, dismissed, hidden by a
+ * "never show ones like this", a repeat of an earlier one, or skipped because it doesn't read as a spend.
+ * The review list is built from this, so the two always agree.
  */
-export function bankSuggestions(
-  notes: BankNote[], expenses: Expense[], merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>, dismissed: string[],
-  toDay: (ms: number) => Day, ignore: string[] = [],
-): BankSuggestion[] {
-  const used = new Set([...dismissed, ...expenses.map((e) => e.bankKey).filter((k): k is string => Boolean(k))]);
+export function bankHistory(notes: BankNote[], expenses: Expense[], dismissed: string[], ignore: string[] = []): BankHistoryRow[] {
+  const logged = new Set(expenses.map((e) => e.bankKey).filter((k): k is string => Boolean(k)));
+  const gone = new Set(dismissed);
   const ignored = new Set(ignore);
-  const out: BankSuggestion[] = [];
+  const rows: BankHistoryRow[] = [];
   // Repeats are matched against every earlier notification, including ones already approved or dismissed,
   // so a notification posted again later doesn't come back for review.
   const lastText = new Map<string, number>();
   const lastSpend = new Map<string, number>();
   for (const n of [...notes].sort((a, b) => a.postedAt - b.postedAt)) {
     const p = parseBankNote(n.title, n.text);
-    if (!p || ignored.has(bankPattern(n.title, n.text))) continue;
+    if (!p) { rows.push({ note: n, status: 'skipped', reason: bankNoteReason(n.title, n.text) ?? 'Not read as a spend' }); continue; }
+    // A receipt from a shop's own app (ClassPass, Uber…) that doesn't name the shop is from that shop; a bank's isn't.
+    const merchant = p.merchant || (BANKISH.test(n.label) ? '' : spendName(n.label));
+    const base = { note: n, amount: p.amount, merchant };
+    if (ignored.has(bankPattern(n.title, n.text))) { rows.push({ ...base, status: 'hidden' }); continue; }
     const textKey = `${n.pkg}|${n.title}|${n.text}`;
     const spendKey = `${p.amount}|${p.merchant}`;
     // A repeat is the very same words, amount included, within 3 hours (a notification posted again), or the
@@ -938,17 +963,28 @@ export function bankSuggestions(
       || (lastSpend.has(spendKey) && n.postedAt - lastSpend.get(spendKey)! < 10 * 60_000);
     lastText.set(textKey, n.postedAt);
     lastSpend.set(spendKey, n.postedAt);
-    if (repeat || used.has(n.key)) continue;
-    const day = toDay(n.postedAt);
-    // A receipt from a shop's own app (ClassPass, Uber…) that doesn't name the shop is from that shop; a bank's isn't.
-    const merchant = p.merchant || (BANKISH.test(n.label) ? '' : spendName(n.label));
-    const memory = merchants[merchant];
-    out.push({
-      key: n.key, day, at: n.postedAt, amount: p.amount, merchant, app: n.label,
-      kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? merchant,
-      logged: expenses.some((e) => e.day === day && e.amount === p.amount && !e.bankKey),
-      source: { title: n.title, text: n.text },
-    });
+    rows.push({ ...base, status: repeat ? 'repeat' : logged.has(n.key) ? 'logged' : gone.has(n.key) ? 'dismissed' : 'review' });
   }
-  return out.reverse();
+  return rows;
+}
+
+/**
+ * Spends to review from kept bank notifications: newest first, leaving out ones already logged from a
+ * notification or dismissed. Each starts with what you chose for that shop last time.
+ */
+export function bankSuggestions(
+  notes: BankNote[], expenses: Expense[], merchants: Record<string, { kind: SpendKind; tags: string[]; note?: string }>, dismissed: string[],
+  toDay: (ms: number) => Day, ignore: string[] = [],
+): BankSuggestion[] {
+  return bankHistory(notes, expenses, dismissed, ignore).filter((r) => r.status === 'review').map((r) => {
+    const n = r.note, merchant = r.merchant ?? '', amount = r.amount ?? 0;
+    const day = toDay(n.postedAt);
+    const memory = merchants[merchant];
+    return {
+      key: n.key, day, at: n.postedAt, amount, merchant, app: n.label,
+      kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? merchant,
+      logged: expenses.some((e) => e.day === day && e.amount === amount && !e.bankKey),
+      source: { title: n.title, text: n.text },
+    };
+  }).reverse();
 }

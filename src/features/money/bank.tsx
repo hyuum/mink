@@ -2,7 +2,7 @@
 // spends to review, once a day, from a card on Home and Money. Settings live in More › Settings.
 import { useEffect, useMemo, useState } from 'react';
 import { actions, useData } from '../../data/store';
-import { bankPattern, bankSuggestions, spendName, type BankNote, type BankSuggestion } from '../../data/logic';
+import { bankHistory, bankPattern, bankSuggestions, spendName, type BankHistoryRow, type BankNote, type BankSuggestion } from '../../data/logic';
 import type { SpendKind } from '../../data/types';
 import { relativeDay, todayISO } from '../../lib/dates';
 import { fmtMoney } from '../../lib/money';
@@ -175,6 +175,7 @@ export function BankSettingsCard() {
   const native = phoneAvailable();
   const [access, setAccess] = useState<boolean | null>(null);
   const [seen, setSeen] = useState<{ pkg: string; label: string; count: number; last: number }[]>([]);
+  const [history, setHistory] = useState(false);
 
   useEffect(() => {
     if (!native) return;
@@ -234,8 +235,14 @@ export function BankSettingsCard() {
                 </span>
               </label>
             ))}
+            {b.apps.length > 0 && (
+              <button type="button" className="card-link" style={{ justifySelf: 'start' }} onClick={() => setHistory(true)}>Notification history</button>
+            )}
           </div>
         )}
+        <Sheet open={history} onClose={() => setHistory(false)} label="Notification history">
+          {history && <HistoryBody />}
+        </Sheet>
         {(b.ignore?.length ?? 0) > 0 && (
           <div className="stack" style={{ gap: 6 }}>
             <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -255,5 +262,57 @@ export function BankSettingsCard() {
         )}
       </div>
     </Card>
+  );
+}
+
+const STATUS: Record<BankHistoryRow['status'], string> = {
+  review: 'Waiting for review', logged: 'Logged', dismissed: 'Dismissed', hidden: 'Hidden (never show ones like this)',
+  repeat: 'Repeat of an earlier one', skipped: 'Skipped',
+};
+
+/** Every notification kept from the ticked apps (30 days), newest first, with what happened to it and why. */
+function HistoryBody() {
+  const data = useData();
+  const b = data.settings.bank;
+  const notes = useBankNotes(true);
+  const [only, setOnly] = useState<'all' | 'skipped'>('all');
+  const rows = useMemo(() => bankHistory(notes, data.expenses, data.bankDismissed, b.ignore).reverse(), [notes, data.expenses, data.bankDismissed, b.ignore]);
+  const shown = only === 'all' ? rows : rows.filter((r) => r.status !== 'review' && r.status !== 'logged');
+  const today = todayISO();
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <div>
+        <h2>Notification history</h2>
+        <p className="small muted">Everything kept from the apps you ticked over the last 30 days, including ones you dismissed, and what the app made of each. Only notifications with a dollar amount are kept.</p>
+      </div>
+      <div className="seg" role="tablist" aria-label="Show" style={{ alignSelf: 'flex-start' }}>
+        <button role="tab" aria-selected={only === 'all'} onClick={() => setOnly('all')}>All {rows.length}</button>
+        <button role="tab" aria-selected={only === 'skipped'} onClick={() => setOnly('skipped')}>Not suggested {rows.filter((r) => r.status !== 'review' && r.status !== 'logged').length}</button>
+      </div>
+      {shown.length === 0 && <p className="small muted">{notes.length ? 'Nothing here.' : 'Nothing kept yet. Notifications with a dollar amount from the ticked apps appear here as they arrive.'}</p>}
+      <ul className="bank-history">
+        {shown.map((r) => {
+          const d = todayISO(r.note.postedAt);
+          return (
+            <li key={r.note.key} className={`bh-${r.status}`}>
+              <div className="row small" style={{ justifyContent: 'space-between', gap: 8 }}>
+                <span className="muted">{r.note.label} · {relativeDay(d, today)} {new Date(r.note.postedAt).toLocaleTimeString('en-AU', { hour: 'numeric', minute: '2-digit' })}</span>
+                {r.amount !== undefined && <b className="num">{fmtMoney(r.amount)}</b>}
+              </div>
+              <blockquote>
+                {r.note.title && <b>{r.note.title}</b>}
+                <span>{r.note.text}</span>
+              </blockquote>
+              <div className="row small" style={{ justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+                <span className="bh-status">{STATUS[r.status]}{r.reason ? `: ${r.reason}` : ''}{r.merchant && r.status !== 'skipped' ? ` · shop "${r.merchant}"` : ''}</span>
+                {r.status === 'dismissed' && (
+                  <button type="button" className="card-link" onClick={() => { const before = actions.undismissBank([r.note.key]); showToast('Back up for review', before); }}>Review again</button>
+                )}
+              </div>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }

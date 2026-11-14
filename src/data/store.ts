@@ -361,6 +361,12 @@ export const actions = {
     });
     return before;
   },
+  /** Put dismissed bank suggestions back up for review. */
+  undismissBank(keys: string[]): AppData {
+    const before = state;
+    update((d) => ({ ...d, bankDismissed: d.bankDismissed.filter((k) => !keys.includes(k)) }));
+    return before;
+  },
   /** Hide bank suggestions for good. Keeps the most recent 1000. */
   dismissBank(keys: string[]): AppData {
     const before = state;

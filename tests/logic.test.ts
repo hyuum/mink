@@ -565,3 +565,30 @@ test('receipts from a shop\'s own app: "was successful", renewals, fees; the app
   const s = bankSuggestions([note('com.classpass.classpass', 'ClassPass', 'Payment successful', 0), note('com.commbank.netbank', 'CommBank', 'Payment successful', 1)], [], {}, [], () => '2026-11-14');
   assert.deepEqual(s.map((x) => x.merchant).sort(), ['', 'classpass']);
 });
+
+test('notification history says what became of each kept notification', async () => {
+  const { bankHistory, bankPattern } = await import('../src/data/logic.ts');
+  const t0 = 1_800_000_000_000;
+  const n = (key: string, title: string, text: string, min: number) => ({ key, pkg: 'com.commbank.netbank', label: 'CommBank', title, text, postedAt: t0 + min * 60_000 });
+  const notes = [
+    n('a', 'Purchase', 'You spent $14.50 at Mugi Cafe', 0),
+    n('b', 'Purchase', 'You spent $14.50 at Mugi Cafe', 1), // posted again
+    n('c', 'Pending', '$62.10 pending at Woolworths', 5),
+    n('d', 'Big sale', 'Everything 30% off, from $9', 6),
+    n('e', 'Purchase', 'You spent $8.00 at Bakery', 7),
+    n('f', 'Purchase', 'You spent $22.00 at Cinema', 8),
+    n('g', 'Weekly', 'Your card spend this week $120.00 at merchants', 9),
+  ];
+  const expenses = [{ id: 'x', amount: 1450, kind: 'want' as const, tags: [], note: 'mugi cafe', day: '2027-01-15', bankKey: 'a', createdAt: 0 }];
+  const rows = bankHistory(notes, expenses, ['e'], [bankPattern('Weekly', 'Your card spend this week $120.00 at merchants')]);
+  const by = Object.fromEntries(rows.map((r) => [r.note.key, r]));
+  assert.equal(by.a.status, 'logged');
+  assert.equal(by.b.status, 'repeat');
+  assert.equal(by.c.status, 'skipped');
+  assert.match(by.c.reason!, /pending/);
+  assert.equal(by.d.status, 'skipped');
+  assert.match(by.d.reason!, /ad/);
+  assert.equal(by.e.status, 'dismissed');
+  assert.equal(by.f.status, 'review');
+  assert.equal(by.g.status, 'hidden');
+});
