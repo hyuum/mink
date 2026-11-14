@@ -547,3 +547,21 @@ test('spending stats: pie slices by first tag with fixed tags, weekly or daily s
   assert.equal(week.series.length, 7);
   assert.equal(week.series[2].total, 800);
 });
+
+test('receipts from a shop\'s own app: "was successful", renewals, fees; the app names the shop', async () => {
+  const { bankSuggestions } = await import('../src/data/logic.ts');
+  const ok = (t: string, x: string) => parseBankNote(t, x);
+  assert.deepEqual(ok('ClassPass', 'Your payment of $49.00 was successful'), { amount: 4900, merchant: 'classpass' });
+  assert.equal(ok('ClassPass', 'Your membership has renewed for $79.00')?.amount, 7900);
+  assert.equal(ok('ClassPass', 'A late cancellation fee of $15.00 has been charged')?.amount, 1500);
+  assert.equal(ok('ClassPass', 'Your plan renewed. $79.00 has been charged to your card')?.merchant, 'classpass', 'not "your"');
+  assert.equal(ok('Receipt from ClassPass', 'A$29.00 paid with Visa ••1234')?.merchant, 'classpass');
+  assert.equal(ok('CommBank', '$79.00 purchase at ClassPass Inc was approved')?.merchant, 'classpass inc');
+  // Ads still don't count.
+  assert.equal(ok('ClassPass', 'Classes were $99, now only $49!'), null);
+  assert.equal(ok('Shop', 'Was $80 now $40 — today only'), null);
+  // No shop in the words: the app's name, unless the app is a bank.
+  const note = (pkg: string, label: string, title: string, h: number) => ({ key: pkg, pkg, label, title, text: 'You were charged $79.00 for your monthly plan', postedAt: 1_800_000_000_000 + h * 3_600_000 });
+  const s = bankSuggestions([note('com.classpass.classpass', 'ClassPass', 'Payment successful', 0), note('com.commbank.netbank', 'CommBank', 'Payment successful', 1)], [], {}, [], () => '2026-11-14');
+  assert.deepEqual(s.map((x) => x.merchant).sort(), ['', 'classpass']);
+});

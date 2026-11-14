@@ -863,14 +863,17 @@ export interface BankSuggestion {
 /** Money coming in, or not a purchase at all. */
 const NOT_SPENDING = /\b(received|receive|deposit(ed)?|refund(ed)?|credited|paid you|sent you|incoming|salary|pay ?day|transfer(red)? from|cashback|reversal|reversed|declined|balance|available|limit|reminder|due on|statement|pending|authori[sz]ation hold)\b/i;
 /** Ads and offers that quote a price ("on sale for $49", "flights from $99"). */
-const PROMO = /\b(sale|on sale|off|offer|offers|deal|deals|discount|save|saving|savings|promo|promotion|coupon|voucher|code|win|reward|rewards|points|bonus|free|limited|ends|ending soon|shop now|buy now|book now|order now|new arrivals|price drop|starting at|from only|only|was|subscribe|upgrade|trial|earn|exclusive|hurry|last chance|don'?t miss|up to)\b|\d+\s?%/i;
+const PROMO = /\b(sale|on sale|off|offer|offers|deal|deals|discount|save|saving|savings|promo|promotion|coupon|voucher|code|win|reward|rewards|points|bonus|free|limited|ends|ending soon|shop now|buy now|book now|order now|new arrivals|price drop|starting at|from only|subscribe|upgrade|trial|earn|exclusive|hurry|last chance|don'?t miss|up to)\b|\b(?:was|now|only)\s+(?:A?\$|AUD)|\d+\s?%/i;
 /** Words that say money actually left your account. */
-const PURCHASE = /\b(purchase|purchased|spent|spend|paid|payment|charged|charge|debited|debit|transaction|tap(ped)?|contactless|approved|card ending|withdrawal|withdrew|bought)\b/i;
+const PURCHASE = /\b(purchase|purchased|spent|spend|paid|payment|charged|charge|debited|debit|transaction|tap(ped)?|contactless|approved|card ending|withdrawal|withdrew|bought|renewed|renewal|billed|receipt|fee)\b/i;
 /** Titles that name the kind of alert rather than the shop. */
 const GENERIC_TITLE = /\b(purchase|payment|paid|transaction|spent|spend|card|alert|bank|debit|credit|account|notification|approved|you)\b/i;
 const AMOUNT_RE = /(?:A?\$|AUD\s?)\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.(\d{1,2}))?/;
 const CARD_RE = /^(visa|mastercard|master card|amex|american express|eftpos|debit|credit|card|apple pay|google pay)\b/i;
 const MERCHANT_RE =/\b(?:at|to|with|@)\s+([A-Za-z0-9][^\n]*?)(?=\s+(?:on|for|using|via|with|from|card|ending|was|has|is)\b|[.,!\n(]|\s+-\s|$)/;
+
+/** App names that belong to banks and wallets, which report other shops' spending. */
+const BANKISH = /\b(bank|commbank|netbank|westpac|anz|nab|ing|up|macquarie|bendigo|suncorp|bankwest|st\.? george|citi|hsbc|revolut|wise|paypal|wallet|pay|card|amex|credit union)\b/i;
 
 /** Spend names are kept in lower case, with spaces tidied. */
 export const spendName = (s: string) => s.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -894,7 +897,11 @@ export function parseBankNote(title: string, text: string): { amount: number; me
   if (merchant && (AMOUNT_RE.test(merchant) || paidWithCard)) merchant = '';
   // It has to read like a purchase: a word like "purchase" or "paid", a card, or "at" a shop.
   if (!PURCHASE.test(all) && !paidWithCard && !/\bat\s/i.test(all)) return null;
+  // "charged to your card" names no shop.
+  if (/^(your|you|my|the|this|our)\b/i.test(merchant)) merchant = '';
   if (!merchant && title && !GENERIC_TITLE.test(title) && !AMOUNT_RE.test(title)) merchant = title;
+  // "Receipt from ClassPass" → "classpass".
+  merchant = merchant.replace(/^(receipt|payment|order|invoice|purchase)\s+(from|to|at)\s+/i, '');
   return { amount, merchant: spendName(merchant).slice(0, 40) };
 }
 
@@ -933,10 +940,12 @@ export function bankSuggestions(
     lastSpend.set(spendKey, n.postedAt);
     if (repeat || used.has(n.key)) continue;
     const day = toDay(n.postedAt);
-    const memory = merchants[p.merchant];
+    // A receipt from a shop's own app (ClassPass, Uber…) that doesn't name the shop is from that shop; a bank's isn't.
+    const merchant = p.merchant || (BANKISH.test(n.label) ? '' : spendName(n.label));
+    const memory = merchants[merchant];
     out.push({
-      key: n.key, day, at: n.postedAt, amount: p.amount, merchant: p.merchant, app: n.label,
-      kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? p.merchant,
+      key: n.key, day, at: n.postedAt, amount: p.amount, merchant, app: n.label,
+      kind: memory?.kind ?? 'want', tags: memory?.tags ?? [], note: memory?.note ?? merchant,
       logged: expenses.some((e) => e.day === day && e.amount === p.amount && !e.bankKey),
       source: { title: n.title, text: n.text },
     });
