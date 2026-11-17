@@ -422,12 +422,15 @@ export function TimeDay() {
     if (!h) return;
     hold.current = null;
     const b = h.block;
-    let before;
+    let before, made: ID | null | undefined;
     if (h.phone) {
       const ph = h.phone;
       before = actions.approvePhone([{ key: ph.key, start: ph.start, end: ph.end, categoryId: ph.categoryId, label: b.label, pkg: ph.apps[0]?.pkg }]);
-    } else before = actions.completePlan(b.id, Date.now(), b.startMin).before;
+      made = getData().entries.find((e) => e.deviceKey === ph.key)?.id;
+    } else ({ before, entryId: made } = actions.completePlan(b.id, Date.now(), b.startMin));
     setHolding(null);
+    // The new block comes up selected, so it can be resized or changed straight away.
+    if (made) setSel({ kind: 'entry', id: made });
     try { navigator.vibrate?.(18); } catch { /* not supported */ }
     showToast(`${b.label || cat(b.categoryId)?.name} ${h.phone ? 'approved' : 'done'} · ${fmtDuration(b.endMin - b.startMin)} logged`, before);
     const colour = cat(b.categoryId)?.color ?? '#8DBA78';
