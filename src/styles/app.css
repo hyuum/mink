@@ -921,7 +921,7 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .bank-history .bh-status { color: var(--muted); }
 .bank-history .bh-review .bh-status, .bank-history .bh-logged .bh-status { color: var(--green-strong); font-weight: 700; }
 .bank-history .bh-skipped .bh-status { color: var(--pink-ink); }
-/* What's new */
+/* App update notes */
 .whatsnew { display: grid; gap: 14px; }
 .whatsnew section { display: grid; gap: 6px; }
 .whatsnew ul { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 14.5px; }
@@ -932,3 +932,6 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .phone-hist.ph-dismissed .ph-status { color: var(--pink-ink); }
 .phone-hist.ph-logged .ph-status { color: var(--green-strong); }
 .phone-hist .btn { flex: none; min-height: 36px; }
+.whatsnew li b { font-weight: 700; }
+.whatsnew .chg-fix { color: var(--pink-ink); }
+.whatsnew .chg-new { color: var(--green-strong); }

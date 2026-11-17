@@ -151,7 +151,7 @@ export function Settings({ page }: { page: SettingsPage }) {
           </div>
         </Card>
         <AndroidAppCard />
-        <button type="button" className="card-link" style={{ justifySelf: 'center' }} onClick={() => whatsNew.set(true)}>What's new</button>
+        <button type="button" className="card-link" style={{ justifySelf: 'center' }} onClick={() => whatsNew.set(true)}>App updates</button>
         <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p></>}
       </div>
     </>

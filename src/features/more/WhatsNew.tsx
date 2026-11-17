@@ -1,4 +1,4 @@
-// "What's new": after an update, the changes you haven't seen yet, once. Settings can open the full list.
+// App update notes: after an update, the changes you haven't seen yet, once. Settings can open the full list.
 import { useEffect, useState } from 'react';
 import { useData, useReady } from '../../data/store';
 import { CHANGELOG, LATEST_CHANGE } from '../../app/changelog';
@@ -26,14 +26,20 @@ export function WhatsNewHost() {
   const open = asked || auto !== null;
   const entries = asked ? CHANGELOG : CHANGELOG.filter((c) => c.id > (auto ?? LATEST_CHANGE));
   const close = () => { markSeen(); setAuto(null); whatsNew.set(false); };
+  // Updates on the same day read as one list.
+  const byDate: { date: string; items: string[] }[] = [];
+  for (const c of entries) {
+    const last = byDate[byDate.length - 1];
+    if (last && last.date === c.date) last.items.push(...c.items); else byDate.push({ date: c.date, items: [...c.items] });
+  }
   return (
-    <Sheet open={open && entries.length > 0} onClose={close} label="What's new">
-      <h2>What's new</h2>
+    <Sheet open={open && entries.length > 0} onClose={close} label="App update">
+      <h2>App update</h2>
       <div className="whatsnew">
-        {entries.map((c) => (
-          <section key={c.id}>
+        {byDate.map((c) => (
+          <section key={c.date}>
             <p className="section-label">{c.date}</p>
-            <ul>{c.items.map((t) => <li key={t}>{t}</li>)}</ul>
+            <ul>{c.items.map((t) => { const [k, ...rest] = t.split(': '); return <li key={t}>{rest.length ? <><b className={`chg-${k.toLowerCase()}`}>{k}</b> {rest.join(': ')}</> : t}</li>; })}</ul>
           </section>
         ))}
       </div>
