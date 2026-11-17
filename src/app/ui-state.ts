@@ -39,6 +39,9 @@ function createStore<T>(initial: T) {
   };
 }
 
+/** Settings asked to show the full list of changes. */
+export const whatsNew = createStore<boolean>(false);
+
 /** A theme or skin being tried on in the Store; not saved, and cleared on leaving the Store. */
 export const tryOn = createStore<string | null>(null);
 

@@ -1,7 +1,7 @@
 // Settings and data tools. Kept deliberately plain; the More screen gets its proper design in a later round.
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
-import { moreView, showToast } from '../../app/ui-state';
+import { moreView, showToast, whatsNew } from '../../app/ui-state';
 import { Band, Card, ChipGroup, Sheet } from '../../ui/kit';
 import { IconGrip, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
@@ -151,6 +151,7 @@ export function Settings({ page }: { page: SettingsPage }) {
           </div>
         </Card>
         <AndroidAppCard />
+        <button type="button" className="card-link" style={{ justifySelf: 'center' }} onClick={() => whatsNew.set(true)}>What's new</button>
         <p className="small muted" style={{ textAlign: 'center' }}>{builtLabel()}</p></>}
       </div>
     </>

@@ -15,6 +15,7 @@ import { Tasks } from '../features/tasks/Tasks';
 import { More } from '../features/more/Hub';
 import { QuickAdd } from '../features/add/QuickAdd';
 import { CelebrationHost, useDailyRewards } from '../features/dailies/Dailies';
+import { WhatsNewHost } from '../features/more/WhatsNew';
 
 const SCREENS = { home: Home, time: TimeDay, week: TimeWeek, stats: TimeSummary, journal: Journal, money: Money, tasks: Tasks, more: More };
 const TITLES = { home: 'Home', time: 'Time', week: 'Week', stats: 'Time stats', journal: 'Journal', money: 'Money', tasks: 'Tasks', more: 'More' };
@@ -67,6 +68,7 @@ export function App() {
       <QuickAdd />
       <ToastHost />
       <CelebrationHost />
+      <WhatsNewHost />
     </>
   );
 }
