@@ -394,6 +394,12 @@ export const actions = {
     update((d) => ({ ...d, phoneDismissed: [...d.phoneDismissed.filter((k) => !keys.includes(k)), ...keys].slice(-1000) }));
     return before;
   },
+  /** Put dismissed phone-use stretches back on the day to review. */
+  undismissPhone(keys: string[]): AppData {
+    const before = state;
+    update((d) => ({ ...d, phoneDismissed: d.phoneDismissed.filter((k) => !keys.includes(k)) }));
+    return before;
+  },
   updatePhoneSettings(patch: Partial<PhoneSettings>) {
     update((d) => ({ ...d, settings: { ...d.settings, phone: { ...d.settings.phone, ...patch } } }));
   },

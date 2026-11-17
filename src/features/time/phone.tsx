@@ -120,6 +120,7 @@ export function PhoneSettingsCard() {
   const native = phoneAvailable();
   const [access, setAccess] = useState<boolean | null>(null);
   const [week, setWeek] = useState<PhoneSession[]>([]);
+  const [history, setHistory] = useState(false);
 
   useEffect(() => {
     if (!native) return;
@@ -132,7 +133,7 @@ export function PhoneSettingsCard() {
   useEffect(() => {
     if (!native || !access) return;
     phoneSessions(Date.now() - 7 * 86_400_000, Date.now()).then(setWeek);
-  }, [native, access]);
+  }, [native, access, history]);
 
   // Apps used for an hour or more in the last week, most used first. Shorter ones would only clutter the list.
   const apps = useMemo(() => {
@@ -161,11 +162,15 @@ export function PhoneSettingsCard() {
   };
   return (
     <Card title="Phone tracking">
+      <Sheet open={history} onClose={() => setHistory(false)} label="Phone use history">
+        {history && <PhoneHistory sessions={week} />}
+      </Sheet>
       <div className="stack">
         <label className="row" htmlFor="phone-on" style={{ minHeight: 44, gap: 10, fontSize: 15 }}>
           <input id="phone-on" type="checkbox" checked={p.enabled} onChange={(e) => actions.updatePhoneSettings({ enabled: e.target.checked })} style={{ width: 20, height: 20, accentColor: 'var(--done)' }} />
           Suggest blocks from phone use
         </label>
+        {p.enabled && access && <button type="button" className="card-link" style={{ justifySelf: 'start' }} onClick={() => setHistory(true)}>Phone use history</button>}
         {p.enabled && (
           <label className="row" htmlFor="phone-name-app" style={{ minHeight: 40, gap: 10, fontSize: 14 }}>
             <input id="phone-name-app" type="checkbox" checked={p.nameAfterApp} onChange={(e) => actions.updatePhoneSettings({ nameAfterApp: e.target.checked })} style={{ width: 18, height: 18, accentColor: 'var(--done)' }} />
@@ -223,5 +228,59 @@ export function PhoneSettingsCard() {
         )}
       </div>
     </Card>
+  );
+}
+
+/**
+ * The last week of phone use as the day view would suggest it, dismissed stretches included, so one dismissed
+ * by mistake can be brought back after its Undo is gone. Approved ones show as logged.
+ */
+function PhoneHistory({ sessions }: { sessions: PhoneSession[] }) {
+  const data = useData();
+  const p = data.settings.phone;
+  const since = Date.now() - 7 * 86_400_000;
+  const gone = new Set(data.phoneDismissed);
+  type Row = { key: string; start: number; end: number; title: string; apps: string; status: 'waiting' | 'dismissed' | 'logged' };
+  const rows: Row[] = [
+    ...phoneSuggestions(sessions, data.entries, p, [], Date.now()).map((s): Row => ({
+      key: s.key, start: s.start, end: s.end, title: phoneBlockName(p, s) || data.timeCategories.find((c) => c.id === s.categoryId)?.name || 'Phone use',
+      apps: appsText(s), status: gone.has(s.key) ? 'dismissed' : 'waiting',
+    })),
+    ...data.entries.filter((e) => e.deviceKey && e.start >= since && e.end !== null).map((e): Row => ({
+      key: e.id, start: e.start, end: e.end!, title: e.label || data.timeCategories.find((c) => c.id === e.categoryId)?.name || 'Phone use', apps: '', status: 'logged',
+    })),
+  ].sort((a, b) => b.start - a.start);
+  const days: [string, Row[]][] = [];
+  for (const r of rows) {
+    const d = new Date(r.start).toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'short' });
+    const last = days[days.length - 1];
+    if (last && last[0] === d) last[1].push(r); else days.push([d, [r]]);
+  }
+  const label = { waiting: 'On the day to review', dismissed: 'Dismissed', logged: 'Logged' };
+  return (
+    <div className="stack" style={{ gap: 12 }}>
+      <div>
+        <h2>Phone use history</h2>
+        <p className="small muted">The last week of phone use, as it would be suggested on each day. Bring back a stretch you dismissed by mistake and it shows on its day again to approve.</p>
+      </div>
+      {rows.length === 0 && <p className="small muted">No phone use long enough to suggest in the last week.</p>}
+      {days.map(([d, list]) => (
+        <section key={d} className="stack" style={{ gap: 8 }}>
+          <p className="section-label">{d}</p>
+          {list.map((r) => (
+            <div key={r.key} className={`phone-hist ph-${r.status}`}>
+              <div className="grow" style={{ minWidth: 0 }}>
+                <b>{fmtHM(minOf(r.start))} – {fmtHM(minOf(r.end))} · {r.title}</b>
+                <small className="muted">{fmtDuration((r.end - r.start) / 60_000)}{r.apps ? ` · ${r.apps}` : ''}</small>
+                <small className="ph-status">{label[r.status]}</small>
+              </div>
+              {r.status === 'dismissed' && (
+                <button type="button" className="btn" onClick={() => { const before = actions.undismissPhone([r.key]); showToast('Back on its day to review', before); }}>Bring back</button>
+              )}
+            </div>
+          ))}
+        </section>
+      ))}
+    </div>
   );
 }

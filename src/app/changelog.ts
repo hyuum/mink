@@ -4,6 +4,12 @@ export interface ChangeEntry { id: number; date: string; items: string[] }
 
 export const CHANGELOG: ChangeEntry[] = [
   {
+    id: 10, date: '17 Nov',
+    items: [
+      'Settings › Time tracking › Phone use history: the last week of phone use, including stretches you dismissed. "Bring back" puts one back on its day to approve.',
+    ],
+  },
+  {
     id: 9, date: '17 Nov',
     items: [
       'A "What\'s new" note like this one after each update. Reopen it any time from Settings › App and data.',
