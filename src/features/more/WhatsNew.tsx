@@ -26,19 +26,13 @@ export function WhatsNewHost() {
   const open = asked || auto !== null;
   const entries = asked ? CHANGELOG : CHANGELOG.filter((c) => c.id > (auto ?? LATEST_CHANGE));
   const close = () => { markSeen(); setAuto(null); whatsNew.set(false); };
-  // Updates on the same day read as one list.
-  const byDate: { date: string; items: string[] }[] = [];
-  for (const c of entries) {
-    const last = byDate[byDate.length - 1];
-    if (last && last.date === c.date) last.items.push(...c.items); else byDate.push({ date: c.date, items: [...c.items] });
-  }
   return (
     <Sheet open={open && entries.length > 0} onClose={close} label="App update">
       <h2>App update</h2>
       <div className="whatsnew">
-        {byDate.map((c) => (
-          <section key={c.date}>
-            <p className="section-label">{c.date}</p>
+        {entries.map((c) => (
+          <section key={c.id}>
+            <p className="chg-head"><b>v{c.id}</b><span>{c.date}</span></p>
             <ul>{c.items.map((t) => { const [k, ...rest] = t.split(': '); return <li key={t}>{rest.length ? <><b className={`chg-${k.toLowerCase()}`}>{k}</b> {rest.join(': ')}</> : t}</li>; })}</ul>
           </section>
         ))}

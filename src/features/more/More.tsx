@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, type ChangeEvent, type PointerEvent as RPointerEvent } from 'react';
 import { actions, getData, storageKind, useData } from '../../data/store';
 import { moreView, showToast, whatsNew } from '../../app/ui-state';
+import { LATEST_CHANGE } from '../../app/changelog';
 import { Band, Card, ChipGroup, Sheet } from '../../ui/kit';
 import { IconGrip, IconTrash } from '../../ui/icons';
 import { CATEGORY_COLORS } from '../../data/seed';
@@ -209,7 +210,7 @@ const fmtBuilt = (ms: number) => {
 
 /** Which build this is, e.g. "Android app · version 19 Oct, 1:28 pm". */
 function builtLabel() {
-  return `${phoneAvailable() ? 'Android app' : 'Web app'} · version ${fmtBuilt(__BUILT_AT__)}`;
+  return `${phoneAvailable() ? 'Android app' : 'Web app'} · v${LATEST_CHANGE} · built ${fmtBuilt(__BUILT_AT__)}`;
 }
 
 /** One activity: colour, name, drawn as an arrow or a block, and delete (moving its time somewhere else). */

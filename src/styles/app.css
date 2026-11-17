@@ -935,3 +935,6 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .whatsnew li b { font-weight: 700; }
 .whatsnew .chg-fix { color: var(--pink-ink); }
 .whatsnew .chg-new { color: var(--green-strong); }
+.whatsnew .chg-head { display: flex; align-items: baseline; gap: 8px; margin: 0; }
+.whatsnew .chg-head b { font-size: 15px; }
+.whatsnew .chg-head span { font-size: 13px; color: var(--muted); }
