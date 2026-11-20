@@ -938,3 +938,8 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 .whatsnew .chg-head { display: flex; align-items: baseline; gap: 8px; margin: 0; }
 .whatsnew .chg-head b { font-size: 15px; }
 .whatsnew .chg-head span { font-size: 13px; color: var(--muted); }
+.stats-legend li { display: grid; gap: 6px; }
+.legend-row { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 32px; padding: 0; border: none; background: none; color: var(--ink); font: inherit; font-size: 14px; text-align: left; cursor: pointer; }
+.legend-row[aria-expanded="true"] { font-weight: 700; }
+.legend-act { padding-left: 20px; }
+.legend-act .btn { min-height: 36px; font-size: 13px; }

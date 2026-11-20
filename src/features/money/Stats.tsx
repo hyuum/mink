@@ -1,12 +1,13 @@
 // Money › Stats: one period at a time (a week, a month or all time). A donut of where the money went by tag,
 // spending over the period (days as bars for a week, weeks as a line for longer), top places and biggest spends.
 import { useState, type PointerEvent as RPointerEvent } from 'react';
-import { actions, useData } from '../../data/store';
+import { actions, getData, useData } from '../../data/store';
 import { spendStats, topSpendTags } from '../../data/logic';
 import type { Expense } from '../../data/types';
 import { dayNum, fmtDayShort, monthOf, monthShort, todayISO, weekdayShort } from '../../lib/dates';
 import { fmtMoney } from '../../lib/money';
 import { Card, Sheet } from '../../ui/kit';
+import { showToast } from '../../app/ui-state';
 
 export type StatsPeriod = 'week' | 'month' | 'all';
 
@@ -25,6 +26,8 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
   const tags = topSpendTags(shown);
   const st = spendStats(shown, from, to, tags, period === 'week' ? 'day' : 'week');
   const [tagSheet, setTagSheet] = useState(false);
+  // A tapped row under the chart offers to hide that tag.
+  const [picked, setPicked] = useState<string | null>(null);
   const hiddenHere = data.expenses.filter((e) => e.day >= from && e.day <= to && e.tags.some((t) => hidden.includes(t))).reduce((t, e) => t + e.amount, 0);
   // A tag keeps its colour when others are hidden: colours follow your biggest tags overall, and a hidden
   // tag's colour passes to whichever tag takes its place.
@@ -47,7 +50,7 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
   if (st.count === 0) {
     return (
       <div className="content">
-        <Card action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Tags</button>}>
+        <Card action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Hide tags</button>}>
           <p className="muted" style={{ fontSize: 14 }}>Nothing {hiddenHere ? 'else ' : ''}spent in this {period === 'all' ? 'time' : period}{hiddenHere ? ` (${fmtMoney(hiddenHere)} is in hidden tags)` : ''}.</p>
         </Card>
         {tagsSheet}
@@ -57,18 +60,30 @@ export function MoneyStats({ period, from, to, onOpen }: { period: StatsPeriod; 
   const limit = period === 'week' ? weekly : period === 'month' ? weekly * 4 : weekly * weeks;
   return (
     <div className="content two">
-      <Card title="By tag" className="span stats-hero" action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Tags</button>}>
+      <Card title="By tag" className="span stats-hero" action={<button type="button" className="card-link" onClick={() => setTagSheet(true)}>Hide tags</button>}>
         <Donut slices={st.slices.map((x) => ({ ...x, color: colour(x.tag) }))} total={st.total}
           caption={period === 'all' ? `about ${dollars(st.total / Math.max(1, weeks))} a week` : `of ${dollars(limit)}`} />
         <ul className="stats-legend">
-          {st.slices.map((x) => (
-            <li key={x.tag ?? 'other'}>
-              <span className="sw" style={{ background: colour(x.tag) }} aria-hidden="true" />
-              <span className="grow">{x.tag ? `#${x.tag}` : 'Other'}{x.tag === null && st.untagged > 0 && <small className="muted"> incl. {dollars(st.untagged)} untagged</small>}</span>
-              <span className="muted">{Math.round((x.total / st.total) * 100)}%</span>
-              <b>{fmtMoney(x.total)}</b>
-            </li>
-          ))}
+          {st.slices.map((x) => {
+            const id = x.tag ?? 'other';
+            return (
+              <li key={id}>
+                <button type="button" className="legend-row" aria-expanded={picked === id} onClick={() => setPicked(picked === id ? null : id)}>
+                  <span className="sw" style={{ background: colour(x.tag) }} aria-hidden="true" />
+                  <span className="grow">{x.tag ? `#${x.tag}` : 'Other'}{x.tag === null && st.untagged > 0 && <small className="muted"> incl. {dollars(st.untagged)} untagged</small>}</span>
+                  <span className="muted">{Math.round((x.total / st.total) * 100)}%</span>
+                  <b>{fmtMoney(x.total)}</b>
+                </button>
+                {picked === id && (
+                  <div className="legend-act">
+                    {x.tag
+                      ? <button type="button" className="btn" onClick={() => { const before = getData(); actions.toggleStatsTag(x.tag!); setPicked(null); showToast(`#${x.tag} left out of stats`, before); }}>Hide #{x.tag} from stats</button>
+                      : <button type="button" className="btn" onClick={() => { setPicked(null); setTagSheet(true); }}>Choose tags to hide</button>}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
         {hidden.length > 0 && (
           <button type="button" className="stats-hidden" onClick={() => setTagSheet(true)}>
@@ -138,7 +153,7 @@ function TagsSheet({ open, onClose, hidden }: { open: boolean; onClose: () => vo
   return (
     <Sheet open={open} onClose={onClose} label="Tags in stats">
       <h2>Tags in stats</h2>
-      <p className="small muted">Switch off a tag to leave its spends out of Stats, like rent or a one-off. Your spending list and weekly allowance still count them.</p>
+      <p className="small muted">Switch off a tag to leave its spends out of Stats, like rent or a one-off. Your spending list and weekly allowance still count them. A bill's spends carry the bill's tags, so tag your rent bill #rent to hide it.</p>
       {all.length === 0 ? <p className="small muted">No tags yet.</p> : (
         <ul className="tag-switches">
           {all.map(([t, v]) => (

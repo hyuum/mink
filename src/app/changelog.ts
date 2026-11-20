@@ -3,6 +3,7 @@
 export interface ChangeEntry { id: number; date: string; items: string[] }
 
 export const CHANGELOG: ChangeEntry[] = [
+  { id: 12, date: '20 Nov', items: ['Change: tap a tag in stats to hide it'] },
   { id: 11, date: '17 Nov', items: ['Change: update notes show the version'] },
   { id: 10, date: '17 Nov', items: ['New: phone use history'] },
   { id: 9, date: '17 Nov', items: ['New: update notes', 'Change: filled blocks stay selected'] },
